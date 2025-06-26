@@ -1,20 +1,18 @@
-# 1. Utiliser une image officielle et stable de Playwright.
-# Elle contient déjà Python, Playwright, et les navigateurs.
-# La version v1.44.0-focal est très fiable.
-FROM mcr.microsoft.com/playwright/python:v1.44.0-focal
+FROM mcr.microsoft.com/playwright/python:v1.44.0-jammy
 
-# 2. Définir le répertoire de travail dans le conteneur.
+# Définir le répertoire de travail
 WORKDIR /app
 
-# 3. Copier UNIQUEMENT le fichier des dépendances pour optimiser le cache Docker.
+# Copier et installer les dépendances
 COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# 4. Installer les dépendances listées.
-# Cette étape sera mise en cache si requirements.txt ne change pas.
-RUN pip install -r requirements.txt
+# Installer Playwright et les navigateurs nécessaires
+RUN pip install playwright \
+    && playwright install --with-deps chromium
 
-# 5. Copier le reste de votre code applicatif.
+# Copier tous les autres fichiers du projet
 COPY . .
 
-# 6. Définir la commande qui sera exécutée pour démarrer votre bot.
+# La commande qui sera exécutée pour démarrer le bot
 CMD ["python", "main.py"]

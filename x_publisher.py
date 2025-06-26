@@ -46,7 +46,7 @@ class XPublisher:
             self.page.goto("https://x.com/home")
 
             # Sélecteur précis pour la zone de saisie
-            tweet_box = self.page.locator('div[aria-label="Tweet text"]', strict=True)
+            tweet_box = self.page.locator('div[aria-label="Tweet text"]')
             tweet_box.wait_for(state="visible")
             tweet_box.click()
             tweet_box.fill(content)
@@ -55,7 +55,7 @@ class XPublisher:
             self.page.wait_for_selector('div[role="status"]')
 
             # Sélecteur pour le bouton "Tweet"
-            post_btn = self.page.locator('div[data-testid="tweetButtonInline"]', strict=True)
+            post_btn = self.page.locator('div[data-testid="tweetButtonInline"]')
             post_btn.wait_for(state="enabled")
             post_btn.click()
 
@@ -66,7 +66,7 @@ class XPublisher:
             snippet = content[:20].replace('\n', ' ').replace('"', '\\"')
             profile_url = "https://x.com/your_handle"  # Remplacez par votre handle X
             self.page.goto(profile_url)
-            locator = self.page.locator(f'text="{snippet}"', strict=True)
+            locator = self.page.locator(f'text="{snippet}"')
             locator.wait_for(state="visible", timeout=10000)
 
             logging.info(f"Tweet confirmé sur le profil : '{snippet}...' ")
@@ -94,3 +94,4 @@ class XPublisher:
         """
         self.browser.close()
         self.playwright.stop()
+    

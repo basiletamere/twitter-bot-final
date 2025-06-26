@@ -1,0 +1,15 @@
+# Fichier contenant les secrets
+.env
+
+# Dossiers d'environnement virtuel Python
+venv/
+.venv/
+env/
+
+# Fichiers cache de Python
+__pycache__/
+*.pyc
+
+# Fichiers de configuration des éditeurs de code
+.idea/
+.vscode/

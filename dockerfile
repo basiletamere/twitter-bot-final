@@ -10,11 +10,15 @@ WORKDIR /app
 COPY requirements.txt .
 
 # 4. Installer les dépendances listées dans ton fichier.
-# pip est assez intelligent pour voir que playwright est déjà là et ne le réinstallera pas.
 RUN pip install -r requirements.txt
 
-# 5. Copier le reste de ton code (main.py, etc.) dans le conteneur.
+# 5. AJOUT DE SÉCURITÉ : Forcer l'installation des navigateurs.
+# Normalement, c'est inutile avec cette image de base, mais pour régler le problème
+# persistant, cette commande garantit que les navigateurs sont bien là.
+RUN playwright install --with-deps
+
+# 6. Copier le reste de ton code (main.py, etc.) dans le conteneur.
 COPY . .
 
-# 6. Définir la commande qui sera exécutée pour démarrer le bot.
+# 7. Définir la commande qui sera exécutée pour démarrer le bot.
 CMD ["python", "main.py"]

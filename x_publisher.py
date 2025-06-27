@@ -28,7 +28,7 @@ class XPublisher:
         )
         self.context.set_default_timeout(30000)
         self.page = self.context.new_page()
-        logging.info("Navigateur Playwright initialisé et session restaurée.")
+        logging.info("Navigateur initialisé et session restaurée.")
 
     def post_tweet(self, content: str) -> bool:
         """
@@ -38,8 +38,8 @@ class XPublisher:
             # Aller sur la page d'accueil
             self.page.goto("https://x.com/home", timeout=60000)
 
-            # Attendre et cibler la zone de texte du tweet (Draft.js editor)
-            editor = self.page.locator('div.public-DraftStyleDefault-block')
+            # Attendre et cibler la zone de texte du tweet
+            editor = self.page.locator('div[data-testid="tweetTextarea_0"]')
             editor.wait_for(state="visible")
             editor.click()
             editor.fill(content)
@@ -47,8 +47,8 @@ class XPublisher:
             # Petite pause pour stabiliser
             time.sleep(1)
 
-            # Cibler le bouton 'Post' via son texte
-            post_btn = self.page.locator('span:has-text("Post")')
+            # Cibler le bouton d'envoi du tweet
+            post_btn = self.page.locator('span[data-testid="tweetButtonInline"]', has_text="Post")
             post_btn.wait_for(state="visible")
             post_btn.click()
 

@@ -18,19 +18,22 @@ logging.basicConfig(
 AUTH_FILE = "playwright_auth.json"
 PROMPTS_FILE = "prompts.txt"
 POSTED_LOG = "posted_tweets.log"
-# Cicatrices horaires pour sommeil humain
-SLEEP_START_HOUR = 23  # Début de la période de sommeil (23h)
-SLEEP_END_HOUR = 6     # Fin de la période de sommeil (6h)
+MIN_PROMPTS = 10          # Nombre minimal de prompts
+SLEEP_START_HOUR = 23     # Début de la période de sommeil (23h)
+SLEEP_END_HOUR = 6        # Fin de la période de sommeil (6h)
 
 class BotState:
-    """État du bot : prompts, objectifs journaliers, progression."""
+    """État du bot : gestion des prompts, objectifs journaliers et progression."""
     def __init__(self):
         self.prompts = []
         self.daily_goal = 0
         self.tweets_posted = 0
 
-    def load_prompts(self):
-        """Charge les prompts depuis le fichier de configuration."""
+    def load_prompts(self, engine: GeminiContentEngine):
+        """
+        Charge les prompts depuis le fichier. Si moins que MIN_PROMPTS, déclenche découverte.
+        """
+        # Lecture du fichier
         if os.path.exists(PROMPTS_FILE):
             with open(PROMPTS_FILE, 'r', encoding='utf-8') as f:
                 self.prompts = [line.strip() for line in f if line.strip()]
@@ -39,99 +42,105 @@ class BotState:
             logging.warning(f"{PROMPTS_FILE} introuvable, création d'un fichier vide.")
             open(PROMPTS_FILE, 'a').close()
             self.prompts = []
+        # Découverte jusqu'à seuil
+        while len(self.prompts) < MIN_PROMPTS:
+            added = engine.discover_and_add_prompts(set(self.prompts), PROMPTS_FILE)
+            if added == 0:
+                logging.warning("Impossible d'ajouter plus de prompts.")
+                break
+            with open(PROMPTS_FILE, 'r', encoding='utf-8') as f:
+                self.prompts = [line.strip() for line in f if line.strip()]
+            logging.info(f"Prompts après découverte : {len(self.prompts)}")
 
     def set_daily_goal(self):
-        """Définit un nouvel objectif aléatoire pour la journée."""
+        """Choisit un objectif de tweets pour la journée."""
         self.daily_goal = random.randint(100, 250)
         self.tweets_posted = 0
-        logging.info(f"Objectif du jour : {self.daily_goal} tweets.")
+        logging.info(f"Objectif quotidien fixé à {self.daily_goal} tweets.")
 
-    def pick_prompt(self):
-        """Récupère un prompt aléatoire parmi la liste."""
+    def pick_prompt(self) -> str:
+        """Renvoie un prompt aléatoire."""
         return random.choice(self.prompts) if self.prompts else None
 
 
 def save_tweet_to_log(content: str):
-    """Enregistre chaque tweet publié dans un fichier pour audit."""
+    """Journalise chaque tweet publié."""
     try:
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         with open(POSTED_LOG, 'a', encoding='utf-8') as f:
-            f.write(f"{timestamp} - {content}\n")
+            f.write(f"{ts} - {content}\n")
     except Exception as e:
-        logging.error(f"Échec de l'écriture du log des tweets : {e}")
+        logging.error(f"Erreur écriture log des tweets : {e}")
 
 
 def post_burst(state: BotState, engine: GeminiContentEngine, publisher: XPublisher):
     """
-    Poste une rafale de tweets (30-50) jusqu'à atteindre l'objectif ou épuisement.
-    Imite un comportement humain avec pauses variables.
+    Poster une rafale de 30-50 tweets ou jusqu'à atteindre l'objectif.
+    Imite un comportement humain via pauses aléatoires.
     """
     burst_size = random.randint(30, 50)
-    logging.info(f"Lancement d'une rafale de {burst_size} tweets.")
+    logging.info(f"Démarrage d'une rafale de {burst_size} tweets.")
     for _ in range(burst_size):
         if state.tweets_posted >= state.daily_goal:
-            logging.info("Objectif journalier atteint en rafale.")
+            logging.info("Objectif journalier atteint dans la rafale.")
             break
         prompt = state.pick_prompt()
         if not prompt:
-            logging.warning("Aucun prompt disponible, interrompt la rafale.")
+            logging.warning("Aucun prompt disponible, arrêt de la rafale.")
             break
         tweet = engine.generate_tweet(prompt)
         if not tweet:
-            logging.warning(f"Génération échouée pour prompt '{prompt}'.")
+            logging.warning(f"Échec génération pour '{prompt}'.")
         else:
-            if publisher.post_tweet(tweet):
+            success = publisher.post_tweet(tweet)
+            if success:
                 state.tweets_posted += 1
-                logging.info(f"Publié {state.tweets_posted}/{state.daily_goal}.")
+                logging.info(f"Tweet {state.tweets_posted}/{state.daily_goal} publié.")
                 save_tweet_to_log(tweet)
             else:
-                logging.warning("Échec de la publication, pause de 60s.")
+                logging.warning("Publication échouée, pause 60s.")
                 time.sleep(60)
-        # Pause naturelle humaine
         pause = random.uniform(45, 120)
-        logging.debug(f"Pause de {int(pause)}s avant tweet suivant.")
+        logging.debug(f"Pause de {int(pause)}s avant le tweet suivant.")
         time.sleep(pause)
 
 
 def sleep_until_hour(target_hour: int):
-    """
-    Dort jusqu'au prochain target_hour (ex: 6h ou 23h).
-    """
+    """Dort jusqu'à la prochaine occurrence de target_hour."""
     now = datetime.now()
     target = now.replace(hour=target_hour, minute=0, second=0, microsecond=0)
     if now >= target:
         target += timedelta(days=1)
-    seconds = (target - now).total_seconds()
-    hrs, rem = divmod(seconds, 3600)
+    secs = (target - now).total_seconds()
+    hrs, rem = divmod(secs, 3600)
     mins = rem // 60
-    logging.info(f"Sommeil hasta {target.strftime('%H:%M')} (~{int(hrs)}h{int(mins)}m)")
-    time.sleep(seconds)
+    logging.info(f"Sommeil jusqu'à {target.strftime('%H:%M')} (~{int(hrs)}h{int(mins)}m)")
+    time.sleep(secs)
 
 
 def main():
     logging.info("=== DÉMARRAGE DU BOT HUMAIN-LIKE X CONTINU ===")
-    # Init
     engine = GeminiContentEngine()
     publisher = XPublisher(auth_file_path=AUTH_FILE, headless=True)
+
     state = BotState()
-    state.load_prompts()
+    state.load_prompts(engine)
 
     while True:
-        # Période de sommeil nocturne (23h-6h)
         current_hour = datetime.now().hour
+        # période de sommeil 23h-6h
         if current_hour >= SLEEP_START_HOUR or current_hour < SLEEP_END_HOUR:
-            logging.info("Période de sommeil détectée.")
+            logging.info("Sommeil nocturne en cours.")
             sleep_until_hour(SLEEP_END_HOUR)
             state.set_daily_goal()
             continue
 
-        # Journée active : fixer objectif et poster en rafales
+        # Journée active
         state.set_daily_goal()
         while state.tweets_posted < state.daily_goal:
             post_burst(state, engine, publisher)
-        # Après la journée, dormir jusqu'à 23h
+        # Après avoir atteint l'objectif, dormir jusqu'à 23h
         sleep_until_hour(SLEEP_START_HOUR)
-
 
 if __name__ == '__main__':
     main()

@@ -57,11 +57,12 @@ class GeminiContentEngine:
         """
         logging.info("Début de la phase de découverte de nouveaux sujets.")
         discovery_prompt = (
-            "Tu es un stratège de contenu expert. Ton rôle est de trouver 5 nouveaux sujets "
+            "Tu es un stratège de contenu expert. Ton rôle est de trouver des nouveaux sujets "
             "de discussion tendances ou intéressants dans le domaine de la technologie, "
             "de l'IA ou de la programmation. Utilise la recherche web pour trouver des "
             "informations récentes. Ne suggère que des sujets qui ne sont pas déjà "
             "largement couverts. Retourne chaque sujet sur une nouvelle ligne, sans numérotation."
+            "tu dois écrire en anglais à chaque fois, si le contenu n'est pas en anglais ce n'est pas validé."
         )
 
         try:

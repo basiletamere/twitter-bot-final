@@ -48,8 +48,8 @@ class XPublisher:
             # Petite pause pour stabiliser
             time.sleep(1)
 
-            # Cibler le bouton 'Post' via son rôle et son nom
-            post_btn = self.page.get_by_role("button", name="Post")
+            # Cibler le premier bouton d'envoi via data-testid
+            post_btn = self.page.locator('div[data-testid="tweetButtonInline"]').first
             post_btn.wait_for(state="visible")
             post_btn.click()
 

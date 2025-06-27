@@ -37,19 +37,24 @@ class XPublisher:
         try:
             # Aller sur la page d'accueil
             self.page.goto("https://x.com/home", timeout=60000)
-            # Attendre l'affichage du champ de texte du tweet
-            tweet_box = self.page.locator('div[role="textbox"]')
-            tweet_box.wait_for(state="visible")
-            tweet_box.click()
-            tweet_box.fill(content)
-            # Pause courte pour que le contenu soit pris en compte
+
+            # Attendre et cibler la zone de texte du tweet (Draft.js editor)
+            editor = self.page.locator('div.public-DraftStyleDefault-block')
+            editor.wait_for(state="visible")
+            editor.click()
+            editor.fill(content)
+
+            # Petite pause pour stabiliser
             time.sleep(1)
-            # Cibler le bouton d'envoi
-            post_btn = self.page.locator('button[data-testid="tweetButton"]')
-            post_btn.wait_for(state="enabled")
+
+            # Cibler le bouton 'Post' via son texte
+            post_btn = self.page.locator('span:has-text("Post")')
+            post_btn.wait_for(state="visible")
             post_btn.click()
-            # Attendre le traitement réseau et rafraîchissement du flux
+
+            # Attendre le réseau et le rafraîchissement du flux
             self.page.wait_for_load_state("networkidle")
+
             logging.info(f"Tweet envoyé : '{content[:30]}...'")
             return True
         except PlaywrightTimeoutError as e:

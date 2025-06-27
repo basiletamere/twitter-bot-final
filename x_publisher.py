@@ -26,6 +26,7 @@ class XPublisher:
             locale="en-US",
             viewport={"width": 1280, "height": 800}
         )
+        # Définir un timeout global de 30s
         self.context.set_default_timeout(30000)
         self.page = self.context.new_page()
         logging.info("Navigateur initialisé et session restaurée.")
@@ -47,8 +48,8 @@ class XPublisher:
             # Petite pause pour stabiliser
             time.sleep(1)
 
-            # Cibler le bouton d'envoi du tweet
-            post_btn = self.page.locator('span[data-testid="tweetButtonInline"]', has_text="Post")
+            # Cibler le bouton 'Post' via son rôle et son nom
+            post_btn = self.page.get_by_role("button", name="Post")
             post_btn.wait_for(state="visible")
             post_btn.click()
 

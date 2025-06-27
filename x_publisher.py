@@ -26,7 +26,6 @@ class XPublisher:
             locale="en-US",
             viewport={"width": 1280, "height": 800}
         )
-        # Définir un timeout global de 30s
         self.context.set_default_timeout(30000)
         self.page = self.context.new_page()
         logging.info("Navigateur initialisé et session restaurée.")
@@ -39,22 +38,31 @@ class XPublisher:
             # Aller sur la page d'accueil
             self.page.goto("https://x.com/home", timeout=60000)
 
+            # Ouvrir le composer si nécessaire
+            try:
+                new_btn = self.page.locator('[data-testid="SideNav_NewTweet_Button"]')
+                new_btn.wait_for(state="visible", timeout=10000)
+                new_btn.click()
+                logging.debug("Composer X ouvert via SideNav_NewTweet_Button.")
+            except PlaywrightTimeoutError:
+                logging.debug("Composer déjà ouvert ou bouton NewTweet invisible.")
+
             # Attendre et cibler la zone de texte du tweet
             editor = self.page.locator('div[data-testid="tweetTextarea_0"]')
-            editor.wait_for(state="visible")
+            editor.wait_for(state="visible", timeout=15000)
             editor.click()
             editor.fill(content)
 
             # Petite pause pour stabiliser
             time.sleep(1)
 
-            # Cibler le premier bouton d'envoi via data-testid
+            # Cibler le bouton d'envoi
             post_btn = self.page.locator('div[data-testid="tweetButtonInline"]').first
-            post_btn.wait_for(state="visible")
+            post_btn.wait_for(state="visible", timeout=15000)
             post_btn.click()
 
-            # Attendre le réseau et le rafraîchissement du flux
-            self.page.wait_for_load_state("networkidle")
+            # Attendre la fin du chargement réseau
+            self.page.wait_for_load_state("networkidle", timeout=15000)
 
             logging.info(f"Tweet envoyé : '{content[:30]}...'")
             return True

@@ -48,7 +48,7 @@ class XPublisher:
                 logging.debug("Composer déjà ouvert ou bouton NewTweet invisible.")
 
             # Attendre et cibler la zone de texte du tweet
-            editor = self.page.locator('div[data-testid="tweetTextarea_0"]')
+            editor = self.page.locator('div[data-testid="primaryColumn"] div[data-testid="tweetTextarea_0"]').first
             editor.wait_for(state="visible", timeout=15000)
             editor.click()
             editor.fill(content)

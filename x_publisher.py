@@ -34,44 +34,41 @@ class XPublisher:
         """
         Publie un tweet sur X et retourne True si la publication semble réussie.
         """
+        logging.info("Début de post_tweet()")
         try:
-            # Aller sur la page d'accueil
-            self.page.goto("https://x.com/home", timeout=60000)
+            # Ouvrir directement le composer
+            self.page.goto("https://x.com/compose/tweet", timeout=60000)
+            logging.debug("Page de composition ouverte.")
 
-            # Ouvrir le composer si nécessaire
-            try:
-                new_btn = self.page.locator('[data-testid="SideNav_NewTweet_Button"]')
-                new_btn.wait_for(state="visible", timeout=10000)
-                new_btn.click()
-                logging.debug("Composer X ouvert via SideNav_NewTweet_Button.")
-            except PlaywrightTimeoutError:
-                logging.debug("Composer déjà ouvert ou bouton NewTweet invisible.")
-
-            # Attendre et cibler la zone de texte du tweet
-            editor = self.page.locator('div[data-testid="primaryColumn"] div[data-testid="tweetTextarea_0"]').first
+            # Attendre la zone de texte
+            editor = self.page.locator('div[aria-label="Tweet text"]')
             editor.wait_for(state="visible", timeout=15000)
             editor.click()
             editor.fill(content)
+            logging.debug(f"Contenu saisi ({len(content)} chars).")
 
             # Petite pause pour stabiliser
-            time.sleep(1)
+            time.sleep(0.5)
 
-            # Cibler le bouton d'envoi
-            post_btn = self.page.locator('div[data-testid="tweetButtonInline"]').first
+            # Cibler et cliquer le bouton « Tweet »
+            post_btn = self.page.locator('div[data-testid="tweetButtonInline"], div[data-testid="tweetButton"]')
             post_btn.wait_for(state="visible", timeout=15000)
             post_btn.click()
+            logging.debug("Clic sur Tweet effectué.")
 
-            # Attendre la fin du chargement réseau
+            # On attend que le réseau soit calme avant de continuer
             self.page.wait_for_load_state("networkidle", timeout=15000)
-
-            logging.info(f"Tweet envoyé : '{content[:30]}...'")
+            logging.info(f"Tweet envoyé avec succès : « {content[:30]}… »")
             return True
+
         except PlaywrightTimeoutError as e:
             logging.error(f"Timeout lors de la publication : {e}")
             return False
         except Exception as e:
             logging.error(f"Erreur inattendue lors de la publication : {e}")
             return False
+        finally:
+            logging.info("Fin de post_tweet()")
 
     def close(self) -> None:
         """

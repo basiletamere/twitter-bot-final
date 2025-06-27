@@ -32,29 +32,26 @@ class XPublisher:
 
     def post_tweet(self, content: str) -> bool:
         """
-        Publie un tweet sur X et retourne True si aucun exception n'est levée.
+        Publie un tweet sur X et retourne True si la publication semble réussie.
         """
         try:
-            # Ouvrir la page d'accueil de X
+            # Aller sur la page d'accueil
             self.page.goto("https://x.com/home", timeout=60000)
-
-            # Zone de texte
-            tweet_box = self.page.locator('div[aria-label="Tweet text"]')
+            # Attendre l'affichage du champ de texte du tweet
+            tweet_box = self.page.locator('div[role="textbox"]')
             tweet_box.wait_for(state="visible")
             tweet_box.click()
             tweet_box.fill(content)
-
-            # Bouton "Tweet"
-            post_btn = self.page.locator('div[data-testid="tweetButtonInline"]')
+            # Pause courte pour que le contenu soit pris en compte
+            time.sleep(1)
+            # Cibler le bouton d'envoi
+            post_btn = self.page.locator('button[data-testid="tweetButton"]')
             post_btn.wait_for(state="enabled")
             post_btn.click()
-
-            # Attente du réseau et retour à l'état stable
+            # Attendre le traitement réseau et rafraîchissement du flux
             self.page.wait_for_load_state("networkidle")
-
-            logging.info(f"Tweet envoyé avec succès : '{content[:30]}...'")
+            logging.info(f"Tweet envoyé : '{content[:30]}...'")
             return True
-
         except PlaywrightTimeoutError as e:
             logging.error(f"Timeout lors de la publication : {e}")
             return False

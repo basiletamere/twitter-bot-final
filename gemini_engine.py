@@ -5,25 +5,29 @@ from typing import Set, Optional
 
 import google.generativeai as genai
 
+# Clé API par défaut pour exécution locale (si VARIABLE d'environnement non définie)
+DEFAULT_GEMINI_API_KEY = "AIzaSyDKoohEijsIeAU3q4rw0hmqypqg3CphbGE"
+
 class GeminiContentEngine:
     """
     Moteur pour générer du contenu à l'aide de l'API Gemini de Google.
     """
-    def __init__(self, model_name: str = 'gemini-2.0-flash') -> None:
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
+    def __init__(self, model_name: str = 'gemini-2.0-flash', api_key: Optional[str] = None) -> None:
+        # Récupère la clé API depuis le paramètre, ou l'env, ou la constante par défaut
+        key = api_key or os.getenv("GEMINI_API_KEY") or DEFAULT_GEMINI_API_KEY
+        if not key:
             logging.critical(
                 "Clé API Gemini non trouvée. "
-                "Assurez-vous de la configurer dans les variables d'environnement sur Render."
+                "Assurez-vous de la configurer comme variable d'environnement GEMINI_API_KEY."
             )
             raise ValueError("Clé API Gemini non trouvée.")
 
         # Configuration de l'API Gemini
-        genai.configure(api_key=api_key)
+        genai.configure(api_key=key)
         self.publishing_model = genai.GenerativeModel(model_name)
         self.discovery_model = genai.GenerativeModel(model_name)
 
-        logging.info("Moteurs de contenu initialisés.")
+        logging.info("Moteurs de contenu initialisés avec le modèle %s.", model_name)
 
     def generate_tweet(self, prompt_text: str) -> Optional[str]:
         """

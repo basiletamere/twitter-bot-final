@@ -3,7 +3,7 @@ import os
 import time
 import random
 import logging
-import schedule
+from datetime import datetime, timedelta
 from gemini_engine import GeminiContentEngine
 from x_publisher import XPublisher
 
@@ -14,94 +14,124 @@ logging.basicConfig(
     handlers=[logging.StreamHandler()]
 )
 
+# Configuration
 AUTH_FILE = "playwright_auth.json"
 PROMPTS_FILE = "prompts.txt"
 POSTED_LOG = "posted_tweets.log"
+# Cicatrices horaires pour sommeil humain
+SLEEP_START_HOUR = 23  # Début de la période de sommeil (23h)
+SLEEP_END_HOUR = 6     # Fin de la période de sommeil (6h)
 
 class BotState:
+    """État du bot : prompts, objectifs journaliers, progression."""
     def __init__(self):
-        self.prompts = set()
+        self.prompts = []
+        self.daily_goal = 0
+        self.tweets_posted = 0
 
     def load_prompts(self):
-        if not os.path.exists(PROMPTS_FILE):
-            logging.warning(f"Le fichier {PROMPTS_FILE} n'existe pas. Création à venir.")
-            open(PROMPTS_FILE, 'a', encoding='utf-8').close()
-            self.prompts = set()
+        """Charge les prompts depuis le fichier de configuration."""
+        if os.path.exists(PROMPTS_FILE):
+            with open(PROMPTS_FILE, 'r', encoding='utf-8') as f:
+                self.prompts = [line.strip() for line in f if line.strip()]
+            logging.info(f"{len(self.prompts)} prompts chargés.")
         else:
-            try:
-                with open(PROMPTS_FILE, 'r', encoding='utf-8') as f:
-                    self.prompts = {line.strip() for line in f if line.strip()}
-                logging.info(f"{len(self.prompts)} prompts chargés.")
-            except IOError as e:
-                logging.error(f"Erreur lecture prompts : {e}")
-                self.prompts = set()
+            logging.warning(f"{PROMPTS_FILE} introuvable, création d'un fichier vide.")
+            open(PROMPTS_FILE, 'a').close()
+            self.prompts = []
 
-bot_state = BotState()
+    def set_daily_goal(self):
+        """Définit un nouvel objectif aléatoire pour la journée."""
+        self.daily_goal = random.randint(100, 250)
+        self.tweets_posted = 0
+        logging.info(f"Objectif du jour : {self.daily_goal} tweets.")
 
-def save_tweet_to_log(content: str) -> None:
+    def pick_prompt(self):
+        """Récupère un prompt aléatoire parmi la liste."""
+        return random.choice(self.prompts) if self.prompts else None
+
+
+def save_tweet_to_log(content: str):
+    """Enregistre chaque tweet publié dans un fichier pour audit."""
     try:
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         with open(POSTED_LOG, 'a', encoding='utf-8') as f:
-            f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {content}\n")
+            f.write(f"{timestamp} - {content}\n")
     except Exception as e:
-        logging.error(f"Échec écriture log : {e}")
+        logging.error(f"Échec de l'écriture du log des tweets : {e}")
 
 
-def task_post_single(engine: GeminiContentEngine, publisher: XPublisher):
+def post_burst(state: BotState, engine: GeminiContentEngine, publisher: XPublisher):
     """
-    Génère et poste un seul tweet, toutes les 10 minutes.
+    Poste une rafale de tweets (30-50) jusqu'à atteindre l'objectif ou épuisement.
+    Imite un comportement humain avec pauses variables.
     """
-    if not bot_state.prompts:
-        logging.warning("Aucun prompt disponible pour publication.")
-        return
-
-    prompt = random.choice(list(bot_state.prompts))
-    logging.info(f"Génération pour prompt : '{prompt}'")
-    tweet = engine.generate_tweet(prompt)
-    if not tweet:
-        logging.warning(f"Aucun contenu généré pour '{prompt}'.")
-        return
-
-    snippet = tweet[:50].replace('\n', ' ')
-    logging.info(f"Contenu généré (extrait) : '{snippet}...'")
-    try:
-        if publisher.post_tweet(tweet):
-            logging.info(f"Tweet posté avec succès.")
-            save_tweet_to_log(tweet)
+    burst_size = random.randint(30, 50)
+    logging.info(f"Lancement d'une rafale de {burst_size} tweets.")
+    for _ in range(burst_size):
+        if state.tweets_posted >= state.daily_goal:
+            logging.info("Objectif journalier atteint en rafale.")
+            break
+        prompt = state.pick_prompt()
+        if not prompt:
+            logging.warning("Aucun prompt disponible, interrompt la rafale.")
+            break
+        tweet = engine.generate_tweet(prompt)
+        if not tweet:
+            logging.warning(f"Génération échouée pour prompt '{prompt}'.")
         else:
-            logging.warning("Échec de la publication.")
-    except Exception as e:
-        logging.error(f"Exception publication : {e}")
+            if publisher.post_tweet(tweet):
+                state.tweets_posted += 1
+                logging.info(f"Publié {state.tweets_posted}/{state.daily_goal}.")
+                save_tweet_to_log(tweet)
+            else:
+                logging.warning("Échec de la publication, pause de 60s.")
+                time.sleep(60)
+        # Pause naturelle humaine
+        pause = random.uniform(45, 120)
+        logging.debug(f"Pause de {int(pause)}s avant tweet suivant.")
+        time.sleep(pause)
+
+
+def sleep_until_hour(target_hour: int):
+    """
+    Dort jusqu'au prochain target_hour (ex: 6h ou 23h).
+    """
+    now = datetime.now()
+    target = now.replace(hour=target_hour, minute=0, second=0, microsecond=0)
+    if now >= target:
+        target += timedelta(days=1)
+    seconds = (target - now).total_seconds()
+    hrs, rem = divmod(seconds, 3600)
+    mins = rem // 60
+    logging.info(f"Sommeil hasta {target.strftime('%H:%M')} (~{int(hrs)}h{int(mins)}m)")
+    time.sleep(seconds)
 
 
 def main():
-    logging.info("=== DÉMARRAGE DU BOT X POST 10MIN ===")
-    try:
-        engine = GeminiContentEngine()
-        publisher = XPublisher(auth_file_path=AUTH_FILE)
-    except Exception as e:
-        logging.critical(f"Initialisation échouée : {e}")
-        return
+    logging.info("=== DÉMARRAGE DU BOT HUMAIN-LIKE X CONTINU ===")
+    # Init
+    engine = GeminiContentEngine()
+    publisher = XPublisher(auth_file_path=AUTH_FILE, headless=True)
+    state = BotState()
+    state.load_prompts()
 
-    bot_state.load_prompts()
+    while True:
+        # Période de sommeil nocturne (23h-6h)
+        current_hour = datetime.now().hour
+        if current_hour >= SLEEP_START_HOUR or current_hour < SLEEP_END_HOUR:
+            logging.info("Période de sommeil détectée.")
+            sleep_until_hour(SLEEP_END_HOUR)
+            state.set_daily_goal()
+            continue
 
-    # Lancement immédiat pour test rapide
-    task_post_single(engine, publisher)
+        # Journée active : fixer objectif et poster en rafales
+        state.set_daily_goal()
+        while state.tweets_posted < state.daily_goal:
+            post_burst(state, engine, publisher)
+        # Après la journée, dormir jusqu'à 23h
+        sleep_until_hour(SLEEP_START_HOUR)
 
-    # Planification toutes les 10 minutes
-    schedule.every(10).minutes.do(task_post_single, engine, publisher)
 
-    logging.info("Planification : un tweet toutes les 10 minutes.")
-    try:
-        while True:
-            schedule.run_pending()
-            time.sleep(1)
-    except KeyboardInterrupt:
-        logging.info("Arrêt manuel demandé.")
-    except Exception as e:
-        logging.critical(f"Erreur critique boucle : {e}")
-
-    publisher.close()
-    logging.info("Bot arrêté.")
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

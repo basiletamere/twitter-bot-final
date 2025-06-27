@@ -3,7 +3,10 @@ from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeo
 import logging
 import time
 
-# User-Agent pour émuler un navigateur réel
+# URL de la page d'accueil X
+HOME_URL = "https://x.com/home"
+
+# User-Agent réaliste pour réduire la détection anti-bot
 DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -11,9 +14,10 @@ DEFAULT_USER_AGENT = (
 )
 
 class XPublisher:
-    def __init__(self, auth_file_path: str, headless: bool = True):
+    def __init__(self, auth_file_path: str, headless: bool = False):
         """
-        Initialise Playwright, restaure la session et configure l'environnement.
+        Initialise Playwright avec le contexte de session donné.
+        headless=False pour afficher la fenêtre Chromium.
         """
         self.playwright = sync_playwright().start()
         self.browser = self.playwright.chromium.launch(
@@ -28,53 +32,58 @@ class XPublisher:
         )
         self.context.set_default_timeout(30000)
         self.page = self.context.new_page()
-        logging.info("Navigateur initialisé et session restaurée.")
+        logging.info(f"Playwright initialisé (headless={headless}) avec auth '{auth_file_path}'")
 
     def post_tweet(self, content: str) -> bool:
         """
-        Publie un tweet sur X et retourne True si la publication semble réussie.
+        Remplit le composer et poste un tweet.
+        Utilise une séquence spécifique pour le champ et clique plusieurs fois sur le bouton.
         """
-        logging.info("Début de post_tweet()")
+        logging.info("-- Début post_tweet() --")
         try:
-            # Ouvrir directement le composer
-            self.page.goto("https://x.com/compose/tweet", timeout=60000)
-            logging.debug("Page de composition ouverte.")
+            # Charger la page d'accueil
+            self.page.goto(HOME_URL, timeout=60000, wait_until="networkidle")
+            logging.debug("Page home chargée")
 
-            # Attendre la zone de texte
-            editor = self.page.locator('div[aria-label="Tweet text"]')
-            editor.wait_for(state="visible", timeout=15000)
-            editor.click()
-            editor.fill(content)
-            logging.debug(f"Contenu saisi ({len(content)} chars).")
+            # Séquence : focus et remplissage du contenu
+            # 1. Clic sur div:nth(2) du textarea
+            self.page.get_by_test_id("tweetTextarea_0").locator("div").nth(2).click()
+            # 2. CapsLock on/off pour focus
+            self.page.get_by_test_id("tweetTextarea_0").press("CapsLock")
+            self.page.get_by_test_id("tweetTextarea_0").press("CapsLock")
+            # 3. Remplir avec le contenu généré
+            self.page.get_by_test_id("tweetTextarea_0").fill(content)
+            logging.debug(f"Contenu du tweet rempli ({len(content)} caractères)")
+            # 4. Re-clic sur div:nth(2) pour stabiliser
+            self.page.get_by_test_id("tweetTextarea_0").locator("div").nth(2).click()
 
-            # Petite pause pour stabiliser
-            time.sleep(0.5)
+            # Clics sur le bouton Tweet
+            for i in range(3):
+                self.page.get_by_test_id("tweetButtonInline").click()
+                logging.debug(f"Clic Tweet #{i+1}")
+                time.sleep(3)
 
-            # Cibler et cliquer le bouton « Tweet »
-            post_btn = self.page.locator('div[data-testid="tweetButtonInline"], div[data-testid="tweetButton"]')
-            post_btn.wait_for(state="visible", timeout=15000)
-            post_btn.click()
-            logging.debug("Clic sur Tweet effectué.")
-
-            # On attend que le réseau soit calme avant de continuer
-            self.page.wait_for_load_state("networkidle", timeout=15000)
-            logging.info(f"Tweet envoyé avec succès : « {content[:30]}… »")
+            # Attendre la fin des requêtes réseau
+            self.page.wait_for_load_state("networkidle", timeout=30000)
+            logging.info("Tweet publié avec succès 🚀")
             return True
 
         except PlaywrightTimeoutError as e:
-            logging.error(f"Timeout lors de la publication : {e}")
+            logging.error(f"Timeout Playwright lors de la publication : {e}")
             return False
         except Exception as e:
             logging.error(f"Erreur inattendue lors de la publication : {e}")
             return False
         finally:
-            logging.info("Fin de post_tweet()")
+            logging.info("-- Fin post_tweet() --")
 
     def close(self) -> None:
         """
-        Ferme le navigateur et arrête Playwright.
+        Ferme le contexte et arrête Playwright.
         """
         try:
+            self.context.close()
             self.browser.close()
         finally:
             self.playwright.stop()
+            logging.info("Playwright arrêté")

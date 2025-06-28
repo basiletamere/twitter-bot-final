@@ -14,16 +14,22 @@ logging.basicConfig(
     handlers=[logging.StreamHandler()]
 )
 
-# Configuration
+# Constantes de configuration
 AUTH_FILE = "playwright_auth.json"
 PROMPTS_FILE = "prompts.txt"
 POSTED_LOG = "posted_tweets.log"
-MIN_PROMPTS = 10          # Nombre minimal de prompts
-SLEEP_START_HOUR = 23     # Début du sommeil (23h)
-SLEEP_END_HOUR = 6        # Fin du sommeil (6h)
+MIN_PROMPTS = 10            # Nombre minimal de prompts
+SLEEP_START_HOUR = 23       # Début du sommeil (23h)
+SLEEP_END_HOUR = 6          # Fin du sommeil (6h)
+LANGUAGES = [
+    ('fr', "français"),
+    ('en', "anglais"),
+    ('ar', "arabe"),
+    ('ja', "japonais")
+]
 
 class BotState:
-    """État du bot : gestion des prompts, objectifs journaliers et progression."""
+    """État du bot : prompts, objectifs journaliers et progression."""
     def __init__(self):
         self.prompts = []
         self.daily_goal = 0
@@ -31,7 +37,7 @@ class BotState:
 
     def load_prompts(self, engine: GeminiContentEngine):
         """
-        Charge les prompts depuis le fichier. Si insuffisant, déclenche découverte.
+        Charge les prompts et déclenche la découverte jusqu'à MIN_PROMPTS.
         """
         if not os.path.exists(PROMPTS_FILE):
             logging.warning(f"{PROMPTS_FILE} introuvable. Création.")
@@ -39,17 +45,18 @@ class BotState:
         with open(PROMPTS_FILE, 'r', encoding='utf-8') as f:
             self.prompts = [line.strip() for line in f if line.strip()]
         logging.info(f"{len(self.prompts)} prompts chargés.")
+        # Découverte
         while len(self.prompts) < MIN_PROMPTS:
             added = engine.discover_and_add_prompts(set(self.prompts), PROMPTS_FILE)
             if added <= 0:
-                logging.warning("Découverte de prompts n'a rien ajouté.")
+                logging.warning("Découverte a échoué, quitte.")
                 break
             with open(PROMPTS_FILE, 'r', encoding='utf-8') as f:
                 self.prompts = [line.strip() for line in f if line.strip()]
             logging.info(f"Prompts après découverte : {len(self.prompts)}")
 
     def set_daily_goal(self):
-        """Choisit un objectif de tweets pour la journée (5–30)."""
+        """Définit un objectif journalier entre 5 et 30 tweets."""
         self.daily_goal = random.randint(5, 30)
         self.tweets_posted = 0
         logging.info(f"Objectif quotidien : {self.daily_goal} tweets.")
@@ -60,7 +67,7 @@ class BotState:
 
 
 def save_tweet_to_log(content: str):
-    """Journalise chaque tweet publié."""
+    """Enregistre chaque tweet posté pour audit."""
     try:
         ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         with open(POSTED_LOG, 'a', encoding='utf-8') as f:
@@ -71,8 +78,7 @@ def save_tweet_to_log(content: str):
 
 def post_burst(state: BotState, engine: GeminiContentEngine, publisher: XPublisher):
     """
-    Poste jusqu'à atteindre l'objectif restant pour la journée.
-    Rafale de taille aléatoire entre 1 et remaining.
+    Poste une rafale de 1 à remaining tweets. Chaque tweet dans une langue choisie aléatoirement parmi 4.
     """
     remaining = state.daily_goal - state.tweets_posted
     if remaining <= 0:
@@ -84,24 +90,33 @@ def post_burst(state: BotState, engine: GeminiContentEngine, publisher: XPublish
         if not prompt:
             logging.warning("Plus de prompts disponibles.")
             return
-        tweet = engine.generate_tweet(prompt)
+        # Choix de la langue
+        lang_code, lang_name = random.choice(LANGUAGES)
+        logging.debug(f"Langue choisie : {lang_name}")
+        # Génération du tweet avec consigne de langue
+        full_prompt = (
+            f"Rédige un tweet court (moins de 280 caractères) en {lang_name} "
+            f"sur le sujet suivant : '{prompt}'. Ne pas inclure de hashtags."
+        )
+        tweet = engine.generate_tweet(full_prompt)
         if tweet:
             success = publisher.post_tweet(tweet)
             if success:
                 state.tweets_posted += 1
-                logging.info(f"Publié {state.tweets_posted}/{state.daily_goal}.")
+                logging.info(f"Tweet {state.tweets_posted}/{state.daily_goal} publié.")
                 save_tweet_to_log(tweet)
             else:
-                logging.warning("post_tweet a retourné False.")
+                logging.warning("post_tweet a retourné False, possible publication réelle.")
         else:
-            logging.warning(f"Aucun contenu pour '{prompt}'.")
+            logging.warning(f"Aucun contenu généré pour '{prompt}' en {lang_name}.")
+        # Pause entre tweets
         pause = random.uniform(45, 120)
-        logging.debug(f"Pause {int(pause)}s.")
+        logging.debug(f"Pause de {int(pause)}s.")
         time.sleep(pause)
 
 
 def sleep_until_hour(target_hour: int):
-    """Dort jusqu'à la prochaine occurrence de target_hour."""
+    """Dort jusqu'à la prochaine target_hour."""
     now = datetime.now()
     target = now.replace(hour=target_hour, minute=0, second=0, microsecond=0)
     if now >= target:
@@ -114,7 +129,7 @@ def sleep_until_hour(target_hour: int):
 
 
 def main():
-    logging.info("=== DÉMARRAGE BOT HUMAIN-LIKE X ===")
+    logging.info("=== DÉMARRAGE BOT HUMAIN-LIKE MULTILINGUE X ===")
     engine = GeminiContentEngine()
     publisher = XPublisher(auth_file_path=AUTH_FILE, headless=True)
     state = BotState()

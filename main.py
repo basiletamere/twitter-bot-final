@@ -112,9 +112,9 @@ def post_burst(state: BotState, engine: GeminiContentEngine, publisher: XPublish
             else:
                 logging.warning(f"Aucun contenu pour '{prompt}' en {lang_name}.")
         except Exception as e:
-            logging.error(f"Erreur lors de post_burst: {e}")
+            logging.error(f"Erreur dans post_burst: {e}")
         pause = random.uniform(45, 120)
-        logging.debug(f"Pause de {int(pause)}s avant le tweet suivant.")
+        logging.debug(f"Pause de {int(pause)}s.")
         time.sleep(pause)
 
 

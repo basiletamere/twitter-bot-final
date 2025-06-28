@@ -19,8 +19,8 @@ AUTH_FILE = "playwright_auth.json"
 PROMPTS_FILE = "prompts.txt"
 POSTED_LOG = "posted_tweets.log"
 MIN_PROMPTS = 10          # Nombre minimal de prompts
-SLEEP_START_HOUR = 23     # Début de la période de sommeil (23h)
-SLEEP_END_HOUR = 6        # Fin de la période de sommeil (6h)
+SLEEP_START_HOUR = 23     # Début du sommeil (23h)
+SLEEP_END_HOUR = 6        # Fin du sommeil (6h)
 
 class BotState:
     """État du bot : gestion des prompts, objectifs journaliers et progression."""
@@ -31,20 +31,18 @@ class BotState:
 
     def load_prompts(self, engine: GeminiContentEngine):
         """
-        Charge les prompts depuis le fichier. Si moins que MIN_PROMPTS, déclenche découverte.
+        Charge les prompts depuis le fichier. Si insuffisant, déclenche découverte.
         """
-        if os.path.exists(PROMPTS_FILE):
-            with open(PROMPTS_FILE, 'r', encoding='utf-8') as f:
-                self.prompts = [line.strip() for line in f if line.strip()]
-            logging.info(f"{len(self.prompts)} prompts chargés.")
-        else:
-            logging.warning(f"{PROMPTS_FILE} introuvable, création d'un fichier vide.")
+        if not os.path.exists(PROMPTS_FILE):
+            logging.warning(f"{PROMPTS_FILE} introuvable. Création.")
             open(PROMPTS_FILE, 'a').close()
-            self.prompts = []
+        with open(PROMPTS_FILE, 'r', encoding='utf-8') as f:
+            self.prompts = [line.strip() for line in f if line.strip()]
+        logging.info(f"{len(self.prompts)} prompts chargés.")
         while len(self.prompts) < MIN_PROMPTS:
             added = engine.discover_and_add_prompts(set(self.prompts), PROMPTS_FILE)
-            if added == 0:
-                logging.warning("Impossible d'ajouter plus de prompts.")
+            if added <= 0:
+                logging.warning("Découverte de prompts n'a rien ajouté.")
                 break
             with open(PROMPTS_FILE, 'r', encoding='utf-8') as f:
                 self.prompts = [line.strip() for line in f if line.strip()]
@@ -54,7 +52,7 @@ class BotState:
         """Choisit un objectif de tweets pour la journée (5–30)."""
         self.daily_goal = random.randint(5, 30)
         self.tweets_posted = 0
-        logging.info(f"Objectif quotidien fixé à {self.daily_goal} tweets.")
+        logging.info(f"Objectif quotidien : {self.daily_goal} tweets.")
 
     def pick_prompt(self) -> str:
         """Renvoie un prompt aléatoire."""
@@ -68,38 +66,37 @@ def save_tweet_to_log(content: str):
         with open(POSTED_LOG, 'a', encoding='utf-8') as f:
             f.write(f"{ts} - {content}\n")
     except Exception as e:
-        logging.error(f"Erreur écriture log des tweets : {e}")
+        logging.error(f"Erreur écriture log tweets : {e}")
 
 
 def post_burst(state: BotState, engine: GeminiContentEngine, publisher: XPublisher):
     """
-    Poster une rafale de 30-50 tweets ou jusqu'à atteindre l'objectif.
-    Imite un comportement humain via pauses aléatoires.
+    Poste jusqu'à atteindre l'objectif restant pour la journée.
+    Rafale de taille aléatoire entre 1 et remaining.
     """
-    burst_size = random.randint(30, 50)
-    logging.info(f"Démarrage d'une rafale de {burst_size} tweets.")
+    remaining = state.daily_goal - state.tweets_posted
+    if remaining <= 0:
+        return
+    burst_size = random.randint(1, remaining)
+    logging.info(f"Rafale de {burst_size}/{remaining} tweets.")
     for _ in range(burst_size):
-        if state.tweets_posted >= state.daily_goal:
-            logging.info("Objectif journalier atteint dans la rafale.")
-            break
         prompt = state.pick_prompt()
         if not prompt:
-            logging.warning("Aucun prompt disponible, arrêt de la rafale.")
-            break
+            logging.warning("Plus de prompts disponibles.")
+            return
         tweet = engine.generate_tweet(prompt)
-        if not tweet:
-            logging.warning(f"Échec génération pour '{prompt}'.")
-        else:
+        if tweet:
             success = publisher.post_tweet(tweet)
             if success:
                 state.tweets_posted += 1
-                logging.info(f"Tweet {state.tweets_posted}/{state.daily_goal} publié.")
+                logging.info(f"Publié {state.tweets_posted}/{state.daily_goal}.")
                 save_tweet_to_log(tweet)
             else:
-                logging.warning("Publication échouée, pause 60s.")
-                time.sleep(60)
+                logging.warning("post_tweet a retourné False.")
+        else:
+            logging.warning(f"Aucun contenu pour '{prompt}'.")
         pause = random.uniform(45, 120)
-        logging.debug(f"Pause de {int(pause)}s avant le tweet suivant.")
+        logging.debug(f"Pause {int(pause)}s.")
         time.sleep(pause)
 
 
@@ -117,28 +114,29 @@ def sleep_until_hour(target_hour: int):
 
 
 def main():
-    logging.info("=== DÉMARRAGE DU BOT HUMAIN-LIKE X CONTINU ===")
+    logging.info("=== DÉMARRAGE BOT HUMAIN-LIKE X ===")
     engine = GeminiContentEngine()
     publisher = XPublisher(auth_file_path=AUTH_FILE, headless=True)
-
     state = BotState()
+
+    # Initialisation
     state.load_prompts(engine)
+    state.set_daily_goal()
 
     while True:
-        current_hour = datetime.now().hour
-        # période de sommeil 23h-6h
-        if current_hour >= SLEEP_START_HOUR or current_hour < SLEEP_END_HOUR:
-            logging.info("Sommeil nocturne en cours.")
+        hour = datetime.now().hour
+        # Sommeil nocturne
+        if hour >= SLEEP_START_HOUR or hour < SLEEP_END_HOUR:
+            logging.info("Sommeil nocturne.")
             sleep_until_hour(SLEEP_END_HOUR)
             state.set_daily_goal()
             continue
-
         # Journée active
-        state.set_daily_goal()
-        while state.tweets_posted < state.daily_goal:
+        if state.tweets_posted < state.daily_goal:
             post_burst(state, engine, publisher)
-        # Après avoir atteint l'objectif, dormir jusqu'à 23h
-        sleep_until_hour(SLEEP_START_HOUR)
+        else:
+            logging.info("Objectif atteint, veille de nuit.")
+            sleep_until_hour(SLEEP_START_HOUR)
 
 if __name__ == '__main__':
     main()

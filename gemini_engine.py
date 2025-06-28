@@ -18,7 +18,7 @@ class GeminiContentEngine:
     def generate_tweet(self, prompt_text: str, lang_name: str, personal: bool = False) -> Optional[str]:
         full_prompt = (
             f"Rédige un tweet court (<280 caractères) en {lang_name} sur : '{prompt_text}'. "
-            f"{'Ton personnel, mentionne que tu as 16 ans, fun et engageant.' if personal else 'Ton varié (fun, sérieux, curieux, provocateur). Inclut une stat ou un fait précis. Évite \"L’IA révolutionne\".'} "
+            f"{'Ton personnel, mentionne que tu as 16 ans, fun et engageant.' if personal else 'Ton varié (fun, sérieux, curieux, provocateur). Inclut une stat ou un fait précis. Évite la phrase \"L’IA révolutionne la science\".'} "
             "Pas de hashtags. Retourne uniquement le tweet."
         )
         try:
@@ -60,7 +60,7 @@ class GeminiContentEngine:
         source = sources.get(category, "https://www.nature.com")
         full_prompt = (
             f"Rédige un tweet court (<250 caractères) en {lang_name} sur : '{prompt_text}'. "
-            "Ton varié, inclut une stat/fait précis. Évite 'L’IA révolutionne'. "
+            "Ton varié, inclut une stat/fait précis. Évite la phrase 'L’IA révolutionne la science'. "
             f"Ajoute le lien : {source}. Pas de hashtags."
         )
         try:

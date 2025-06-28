@@ -18,8 +18,12 @@ class GeminiContentEngine:
     def generate_tweet(self, prompt_text: str, lang_name: str, personal: bool = False) -> Optional[str]:
         full_prompt = (
             f"Rédige un tweet court (<280 caractères) en {lang_name} sur : '{prompt_text}'. "
-            f"{'Ton personnel, mentionne que tu as 16 ans, fun et engageant.' if personal else 'Ton varié (fun, sérieux, curieux, provocateur). Inclut une stat ou un fait précis. Évite la phrase \"L’IA révolutionne la science\".'} "
-            "Pas de hashtags. Retourne uniquement le tweet."
+            "Ton varié (fun, sérieux, curieux, provocateur). Inclut une stat ou un fait précis. "
+            "Évite les phrases clichés sur l'IA. Pas de hashtags. Retourne uniquement le tweet."
+            if not personal else
+            f"Rédige un tweet court (<280 caractères) en {lang_name} sur : '{prompt_text}'. "
+            "Ton personnel, mentionne que tu as 16 ans, fun et engageant. Inclut une stat ou un fait précis. "
+            "Évite les phrases clichés sur l'IA. Pas de hashtags. Retourne uniquement le tweet."
         )
         try:
             response = self.publishing_model.generate_content(full_prompt)
@@ -38,8 +42,8 @@ class GeminiContentEngine:
     def generate_thread(self, prompt_text: str, lang_name: str) -> List[str]:
         thread_prompt = (
             f"Rédige un thread de 3 tweets (<280 caractères chacun) en {lang_name} sur : '{prompt_text}'. "
-            "Ton varié (fun, sérieux, curieux, provocateur). Inclut stats/faits. Pas de hashtags. "
-            "Retourne les tweets séparés par '---'."
+            "Ton varié (fun, sérieux, curieux, provocateur). Inclut stats/faits. Évite les phrases clichés sur l'IA. "
+            "Pas de hashtags. Retourne les tweets séparés par '---'."
         )
         try:
             response = self.publishing_model.generate_content(thread_prompt)
@@ -60,7 +64,7 @@ class GeminiContentEngine:
         source = sources.get(category, "https://www.nature.com")
         full_prompt = (
             f"Rédige un tweet court (<250 caractères) en {lang_name} sur : '{prompt_text}'. "
-            "Ton varié, inclut une stat/fait précis. Évite la phrase 'L’IA révolutionne la science'. "
+            "Ton varié, inclut une stat/fait précis. Évite les phrases clichés sur l'IA. "
             f"Ajoute le lien : {source}. Pas de hashtags."
         )
         try:

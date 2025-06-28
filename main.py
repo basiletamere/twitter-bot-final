@@ -43,21 +43,25 @@ class BotState:
         if not os.path.exists(PROMPTS_FILE):
             logging.warning(f"{PROMPTS_FILE} introuvable. Création.")
             open(PROMPTS_FILE, 'a').close()
-        with open(PROMPTS_FILE, 'r', encoding='utf-8') as f:
-            self.prompts = [line.strip() for line in f if line.strip()]
+        try:
+            with open(PROMPTS_FILE, 'r', encoding='utf-8') as f:
+                self.prompts = [line.strip() for line in f if line.strip()]
+        except Exception as e:
+            logging.error(f"Erreur lecture {PROMPTS_FILE} : {e}")
+            self.prompts = []
         logging.info(f"{len(self.prompts)} prompts chargés.")
         while len(self.prompts) < MIN_PROMPTS:
             try:
                 added = engine.discover_and_add_prompts(set(self.prompts), PROMPTS_FILE)
+                if added <= 0:
+                    logging.warning("Découverte a échoué.")
+                    break
+                with open(PROMPTS_FILE, 'r', encoding='utf-8') as f:
+                    self.prompts = [line.strip() for line in f if line.strip()]
+                logging.info(f"Prompts après découverte : {len(self.prompts)}")
             except Exception as e:
                 logging.error(f"Erreur découverte prompts : {e}")
                 break
-            if added <= 0:
-                logging.warning("Découverte a échoué.")
-                break
-            with open(PROMPTS_FILE, 'r', encoding='utf-8') as f:
-                self.prompts = [line.strip() for line in f if line.strip()]
-            logging.info(f"Prompts après découverte : {len(self.prompts)}")
 
     def set_daily_goal(self):
         """Définit un objectif journalier entre 5 et 30 tweets."""
@@ -95,7 +99,7 @@ def post_burst(state: BotState, engine: GeminiContentEngine, publisher: XPublish
             prompt = state.pick_prompt()
             if not prompt:
                 logging.warning("Plus de prompts disponibles.")
-                return
+                break
             lang_code, lang_name = random.choice(LANGUAGES)
             logging.debug(f"Langue choisie : {lang_name}")
             full_prompt = (
@@ -105,7 +109,7 @@ def post_burst(state: BotState, engine: GeminiContentEngine, publisher: XPublish
             )
             tweet = engine.generate_tweet(full_prompt)
             if tweet:
-                # Nettoyage des lignes indésirables (Option, Here, Voici, Traduction, Translation)
+                # Nettoyage lignes indésirables
                 lines = [
                     l.strip() for l in tweet.splitlines()
                     if l.strip() and not re.match(r'^(Option|Here|Here is|Voici|Traduction|Translation)\b', l, re.IGNORECASE)
@@ -124,9 +128,7 @@ def post_burst(state: BotState, engine: GeminiContentEngine, publisher: XPublish
                 logging.warning(f"Aucun contenu pour '{prompt}' en {lang_name}.")
         except Exception as e:
             logging.error(f"Erreur dans post_burst: {e}")
-        pause = random.uniform(45, 120)
-        logging.debug(f"Pause de {int(pause)}s.")
-        time.sleep(pause)
+        time.sleep(1)  # Pause minimale pour stabilité
 
 
 def sleep_until_hour(target_hour: int):
@@ -144,6 +146,8 @@ def sleep_until_hour(target_hour: int):
 
 def main():
     logging.info("=== DÉMARRAGE BOT HUMAIN-LIKE MULTILINGUE X ===")
+    engine = None
+    publisher = None
     try:
         engine = GeminiContentEngine()
         publisher = XPublisher(auth_file_path=AUTH_FILE, headless=True)
@@ -158,22 +162,22 @@ def main():
                     logging.info("Sommeil nocturne.")
                     sleep_until_hour(SLEEP_END_HOUR)
                     state.set_daily_goal()
-                    continue
-                if state.tweets_posted < state.daily_goal:
+                elif state.tweets_posted < state.daily_goal:
                     post_burst(state, engine, publisher)
                 else:
                     logging.info("Objectif atteint, veille de nuit.")
                     sleep_until_hour(SLEEP_START_HOUR)
             except Exception as inner_e:
-                logging.error(f"Erreur dans boucle de publication: {inner_e}", exc_info=True)
+                logging.error(f"Erreur boucle pub: {inner_e}", exc_info=True)
                 time.sleep(60)
     except Exception as e:
         logging.critical(f"Erreur fatale au démarrage: {e}", exc_info=True)
     finally:
-        try:
-            publisher.close()
-        except:
-            pass
+        if publisher:
+            try:
+                publisher.close()
+            except:
+                pass
         logging.info("Bot arrêté proprement.")
 
 if __name__ == '__main__':

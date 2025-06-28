@@ -3,6 +3,7 @@ import os
 import time
 import random
 import logging
+import re
 from datetime import datetime, timedelta
 from gemini_engine import GeminiContentEngine
 from x_publisher import XPublisher
@@ -82,6 +83,7 @@ def save_tweet_to_log(content: str):
 def post_burst(state: BotState, engine: GeminiContentEngine, publisher: XPublisher):
     """
     Poste une rafale de 1 à remaining tweets. Chaque tweet dans une langue aléatoire.
+    Nettoie les propositions multiples et les introductions/traductions.
     """
     remaining = state.daily_goal - state.tweets_posted
     if remaining <= 0:
@@ -98,15 +100,24 @@ def post_burst(state: BotState, engine: GeminiContentEngine, publisher: XPublish
             logging.debug(f"Langue choisie : {lang_name}")
             full_prompt = (
                 f"Rédige un tweet court (moins de 280 caractères) en {lang_name} "
-                f"sur le sujet suivant : '{prompt}'. Ne pas inclure de hashtags."
+                f"sur le sujet suivant : '{prompt}'. Ne pas inclure de hashtags. "
+                "Retourne uniquement le tweet, sans introduction, traduction ni options multiples."
             )
             tweet = engine.generate_tweet(full_prompt)
             if tweet:
-                success = publisher.post_tweet(tweet)
+                # Nettoyage des lignes indésirables (Option, Here, Voici, Traduction, Translation)
+                lines = [
+                    l.strip() for l in tweet.splitlines()
+                    if l.strip() and not re.match(r'^(Option|Here|Here is|Voici|Traduction|Translation)\b', l, re.IGNORECASE)
+                ]
+                clean = lines[0] if lines else tweet.splitlines()[0]
+                clean = re.sub(r'^\d+[\)\.\s]+', '', clean).strip()
+                tweet_text = clean[:280]
+                success = publisher.post_tweet(tweet_text)
                 if success:
                     state.tweets_posted += 1
                     logging.info(f"Tweet {state.tweets_posted}/{state.daily_goal} publié.")
-                    save_tweet_to_log(tweet)
+                    save_tweet_to_log(tweet_text)
                 else:
                     logging.warning("post_tweet a retourné False, possible publication réelle.")
             else:
@@ -154,7 +165,7 @@ def main():
                     logging.info("Objectif atteint, veille de nuit.")
                     sleep_until_hour(SLEEP_START_HOUR)
             except Exception as inner_e:
-                logging.error(f"Erreur dans la boucle de publication: {inner_e}", exc_info=True)
+                logging.error(f"Erreur dans boucle de publication: {inner_e}", exc_info=True)
                 time.sleep(60)
     except Exception as e:
         logging.critical(f"Erreur fatale au démarrage: {e}", exc_info=True)

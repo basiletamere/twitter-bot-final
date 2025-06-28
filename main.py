@@ -33,7 +33,6 @@ class BotState:
         """
         Charge les prompts depuis le fichier. Si moins que MIN_PROMPTS, déclenche découverte.
         """
-        # Lecture du fichier
         if os.path.exists(PROMPTS_FILE):
             with open(PROMPTS_FILE, 'r', encoding='utf-8') as f:
                 self.prompts = [line.strip() for line in f if line.strip()]
@@ -42,7 +41,6 @@ class BotState:
             logging.warning(f"{PROMPTS_FILE} introuvable, création d'un fichier vide.")
             open(PROMPTS_FILE, 'a').close()
             self.prompts = []
-        # Découverte jusqu'à seuil
         while len(self.prompts) < MIN_PROMPTS:
             added = engine.discover_and_add_prompts(set(self.prompts), PROMPTS_FILE)
             if added == 0:
@@ -53,8 +51,8 @@ class BotState:
             logging.info(f"Prompts après découverte : {len(self.prompts)}")
 
     def set_daily_goal(self):
-        """Choisit un objectif de tweets pour la journée."""
-        self.daily_goal = random.randint(100, 250)
+        """Choisit un objectif de tweets pour la journée (5–30)."""
+        self.daily_goal = random.randint(5, 30)
         self.tweets_posted = 0
         logging.info(f"Objectif quotidien fixé à {self.daily_goal} tweets.")
 

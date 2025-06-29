@@ -88,10 +88,7 @@ def post_randomly(state: BotState, engine: GeminiContentEngine, publisher: XPubl
         if chosen_type == "burst":
             tweet = engine.generate_tweet(prompt, lang_name, personal=personal)
             if tweet:
-                lines = [l.strip() for l in tweet.splitlines() if l.strip() and not re.match(r'^(Option|Here|Voici)\b', l, re.IGNORECASE)]
-                clean = lines[0] if lines else tweet.splitlines()[0]
-                clean = re.sub(r'^\d+[\)\.\s]+', '', clean).strip()
-                tweet_text = clean[:280]
+                tweet_text = tweet[:500]  # Tronque à 500 caractères
                 success = publisher.post_tweet(tweet_text)
                 if success:
                     state.tweets_posted += 1
@@ -103,7 +100,7 @@ def post_randomly(state: BotState, engine: GeminiContentEngine, publisher: XPubl
         elif chosen_type == "thread":
             threads = engine.generate_thread(prompt, lang_name)
             for tweet in threads:
-                tweet_text = tweet.strip()[:280]
+                tweet_text = tweet[:500]  # Tronque à 500 caractères
                 success = publisher.post_tweet(tweet_text)
                 if success:
                     state.tweets_posted += 1
@@ -114,7 +111,7 @@ def post_randomly(state: BotState, engine: GeminiContentEngine, publisher: XPubl
         elif chosen_type == "link":
             tweet = engine.generate_tweet_with_link(prompt, lang_name)
             if tweet:
-                tweet_text = tweet[:280]
+                tweet_text = tweet[:500]  # Tronque à 500 caractères
                 success = publisher.post_tweet(tweet_text)
                 if success:
                     state.tweets_posted += 1
@@ -123,7 +120,7 @@ def post_randomly(state: BotState, engine: GeminiContentEngine, publisher: XPubl
 
         elif chosen_type == "substack":
             tweet = engine.generate_tweet("Rejoignez ma newsletter Substack pour des analyses IA exclusives !", "anglais")
-            tweet_text = f"{tweet} https://ai_lab7.substack.com"[:280]
+            tweet_text = f"{tweet} https://ai_lab7.substack.com"[:500]  # Tronque à 500 caractères
             success = publisher.post_tweet(tweet_text)
             if success:
                 state.tweets_posted += 1
@@ -132,7 +129,7 @@ def post_randomly(state: BotState, engine: GeminiContentEngine, publisher: XPubl
 
         elif chosen_type == "gumroad":
             tweet = engine.generate_tweet("Découvrez mon guide pour créer un bot IA comme @ai_lab7 !", "anglais")
-            tweet_text = f"{tweet} https://gumroad.com/ai_lab7"[:280]
+            tweet_text = f"{tweet} https://gumroad.com/ai_lab7"[:500]  # Tronque à 500 caractères
             success = publisher.post_tweet(tweet_text)
             if success:
                 state.tweets_posted += 1

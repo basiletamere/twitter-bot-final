@@ -17,8 +17,8 @@ class GeminiContentEngine:
 
     def generate_tweet(self, prompt_text: str, lang_name: str, personal: bool = False) -> Optional[str]:
         full_prompt = (
-            f"Rédige un tweet court (<280 caractères) en {lang_name} sur : '{prompt_text}'. "
-            f"{'Ton personnel, mentionne que tu as 16 ans, fun et engageant.' if personal else 'Ton varié (fun, sérieux, curieux, provocateur). Inclut une stat ou un fait précis. Évite les phrases clichés sur l’IA.'} "
+            f"Rédige un tweet court (<500 caractères) en {lang_name} sur : '{prompt_text}'. "
+            f"{'Ton personnel, fun et engageant.' if personal else 'Ton varié (fun, sérieux, curieux, provocateur). Inclut une stat ou un fait précis. Évite les phrases clichés sur l’IA.'} "
             "Pas de hashtags. Retourne uniquement le tweet."
         )
         try:
@@ -27,20 +27,20 @@ class GeminiContentEngine:
             lines = [line.strip() for line in raw.splitlines() if line.strip() and not re.match(r'^(Option|Here|Here is|Voici|Traduction|Translation)\b', line, re.IGNORECASE)]
             tweet = lines[0] if lines else raw.splitlines()[0]
             tweet = re.sub(r'^\d+[\)\.\s]+', '', tweet).strip()
-            return tweet[:280]
+            return tweet[:500]  # Tronque à 500 caractères
         except Exception as exc:
             logging.error(f"Erreur tweet : {exc}")
             return None
 
     def generate_thread(self, prompt_text: str, lang_name: str) -> List[str]:
         thread_prompt = (
-            f"Rédige un thread de 3 tweets (<280 caractères chacun) en {lang_name} sur : '{prompt_text}'. "
+            f"Rédige un thread de 3 tweets (<500 caractères chacun) en {lang_name} sur : '{prompt_text}'. "
             "Ton varié (fun, sérieux, curieux, provocateur). Inclut stats/faits. Évite les phrases clichés sur l’IA. "
             "Pas de hashtags. Retourne les tweets séparés par '---'."
         )
         try:
             response = self.publishing_model.generate_content(thread_prompt)
-            return [t.strip()[:280] for t in response.text.split("---")[:3]]
+            return [t.strip()[:500] for t in response.text.split("---")[:3]]  # Tronque chaque tweet à 500 caractères
         except Exception as exc:
             logging.error(f"Erreur thread : {exc}")
             return []
@@ -50,17 +50,18 @@ class GeminiContentEngine:
         category = prompt_text.split(" - ")[0].lower()
         source = sources.get(category, "https://www.nature.com")
         full_prompt = (
-            f"Rédige un tweet court en {lang_name} sur : '{prompt_text}'. "
+            f"Rédige un tweet court (<500 caractères) en {lang_name} sur : '{prompt_text}'. "
             "Ton varié, inclut une stat/fait précis. Évite les phrases clichés sur l’IA. "
             f"Ajoute le lien : {source}. Pas de hashtags."
         )
         try:
             response = self.publishing_model.generate_content(full_prompt)
             tweet = response.text.strip()
-            lines = [line.strip() for line in tweet.splitlines() if line.strip() and not re.match(r'^(Option|Here|Here is|Voici|Traduction|Translation)\b', line, re.IGNORECASE)]
+            lines = [line.strip() for line in tweet.splitlines() if line.strip() and not re.match(r'^(Option|Here|Here is|Voici|Traduction|Translation)\b', line)).
+
             tweet = lines[0] if lines else tweet.splitlines()[0]
             tweet = re.sub(r'^\d+[\)\.\s]+', '', tweet).strip()
-            return tweet[:280]
+            return tweet[:500]  # Tronque à 500 caractères
         except Exception as exc:
             logging.error(f"Erreur tweet lien : {exc}")
             return None

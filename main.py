@@ -28,6 +28,7 @@ LANGUAGES = [
     ('ja', "japonais", 0.05)
 ]
 
+
 class BotState:
     def __init__(self):
         self.prompts = []
@@ -61,6 +62,7 @@ class BotState:
     def pick_prompt(self) -> str:
         return random.choice(self.prompts) if self.prompts else None
 
+
 def save_tweet_to_log(content: str):
     try:
         ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -69,17 +71,17 @@ def save_tweet_to_log(content: str):
     except Exception as e:
         logging.error(f"Erreur écriture log tweets : {e}")
 
+
 def post_randomly(state: BotState, engine: GeminiContentEngine, publisher: XPublisher):
     remaining = state.daily_goal - state.tweets_posted
     if remaining <= 0:
         state.daily_goal = random.randint(5, 10)
         state.tweets_posted = 0
-        logging.info(f"Nouveau jour détecté. Objectif : {state.daily_goal} tweets.")
+        logging.info(f"Nouvelle journée. Objectif : {state.daily_goal} tweets.")
         return
 
-    # Choisir un type de post aléatoirement (poll retiré)
     post_types = [
-        ("burst", 0.6),  # 60% chance (augmenté pour compenser)
+        ("burst", 0.6),
         ("thread", 0.15),
         ("link", 0.15),
         ("substack", 0.05),
@@ -99,7 +101,7 @@ def post_randomly(state: BotState, engine: GeminiContentEngine, publisher: XPubl
         if chosen_type == "burst":
             tweet = engine.generate_tweet(prompt, lang_name, personal=personal)
             if tweet:
-                lines = [l.strip() for l in tweet.splitlines() if l.strip() and not re.match(r'^(Option|Here|Here is|Voici|Traduction|Translation)\b', l, re.IGNORECASE)]
+                lines = [l.strip() for l in tweet.splitlines() if l.strip() and not re.match(r'^(Option|Here|Voici)\b', l, re.IGNORECASE)]
                 clean = lines[0] if lines else tweet.splitlines()[0]
                 clean = re.sub(r'^\d+[\)\.\s]+', '', clean).strip()
                 tweet_text = clean[:1000]
@@ -130,7 +132,7 @@ def post_randomly(state: BotState, engine: GeminiContentEngine, publisher: XPubl
                 success = publisher.post_tweet(tweet)
                 if success:
                     state.tweets_posted += 1
-                    logging.info(f"Tweet lien publié.")
+                    logging.info("Tweet lien publié.")
                     save_tweet_to_log(tweet)
 
         elif chosen_type == "substack":
@@ -139,7 +141,7 @@ def post_randomly(state: BotState, engine: GeminiContentEngine, publisher: XPubl
             success = publisher.post_tweet(tweet)
             if success:
                 state.tweets_posted += 1
-                logging.info(f"Tweet Substack publié.")
+                logging.info("Tweet Substack publié.")
                 save_tweet_to_log(tweet)
 
         elif chosen_type == "gumroad":
@@ -148,7 +150,7 @@ def post_randomly(state: BotState, engine: GeminiContentEngine, publisher: XPubl
             success = publisher.post_tweet(tweet)
             if success:
                 state.tweets_posted += 1
-                logging.info(f"Tweet Gumroad publié.")
+                logging.info("Tweet Gumroad publié.")
                 save_tweet_to_log(tweet)
 
     except Exception as e:
@@ -158,26 +160,22 @@ def post_randomly(state: BotState, engine: GeminiContentEngine, publisher: XPubl
         logging.info(f"Pause de {sleep_time/60:.1f} minutes avant prochain post.")
         time.sleep(sleep_time)
 
+
 def main():
     logging.info("=== DÉMARRAGE BOT HUMAIN-LIKE MULTILINGUE X ===")
-    engine = None
-    publisher = None
+    engine = GeminiContentEngine()
+    publisher = XPublisher(auth_file=AUTH_FILE, headless=True)
+    state = BotState()
+    state.load_prompts(engine)
     try:
-        engine = GeminiContentEngine()
-        publisher = XPublisher(auth_file_path=AUTH_FILE, headless=True)
-        state = BotState()
-        state.load_prompts(engine)
         while True:
             post_randomly(state, engine, publisher)
     except Exception as e:
         logging.critical(f"Erreur fatale au démarrage: {e}", exc_info=True)
     finally:
-        if publisher:
-            try:
-                publisher.close()
-            except:
-                pass
+        publisher.close()
         logging.info("Bot arrêté proprement.")
+
 
 if __name__ == '__main__':
     main()

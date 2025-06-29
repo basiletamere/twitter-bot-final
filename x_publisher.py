@@ -62,14 +62,19 @@ class XPublisher:
             try:
                 self.page.goto(HOME_URL, timeout=60000, wait_until="networkidle")
                 # Focus et remplissage
-                self.page.get_by_test_id("tweetTextarea_0").locator("div").nth(2).click()
-                self.page.get_by_test_id("tweetTextarea_0").press("CapsLock")
-                self.page.get_by_test_id("tweetTextarea_0").press("CapsLock")
-                self.page.get_by_test_id("tweetTextarea_0").fill(content)
-                self.page.get_by_test_id("tweetTextarea_0").locator("div").nth(2).click()
-                # Attente activation bouton
+                ta = self.page.get_by_test_id("tweetTextarea_0")
+                ta.locator("div").nth(2).click()
+                ta.press("CapsLock")
+                ta.press("CapsLock")
+                ta.fill(content)
+                ta.locator("div").nth(2).click()
+                # Attente visibilité bouton
                 btn = self.page.get_by_test_id("tweetButtonInline")
-                btn.wait_for(state="enabled", timeout=15000)
+                btn.wait_for(state="visible", timeout=15000)
+                # Vérifier qu'il est activé
+                if not btn.is_enabled():
+                    logging.warning("Bouton tweet non activé, abandon publication.")
+                    return False
                 # Clics multiples
                 for i in range(3):
                     btn.click()
@@ -104,13 +109,15 @@ class XPublisher:
         try:
             self.page.goto(HOME_URL, timeout=60000, wait_until="networkidle")
             # Ouvrir le composer et entrer la question
-            textarea = self.page.get_by_test_id("tweetTextarea_0")
-            textarea.locator("div").nth(2).click()
-            textarea.fill(question)
+            ta = self.page.get_by_test_id("tweetTextarea_0")
+            ta.locator("div").nth(2).click()
+            ta.fill(question)
             time.sleep(1)
 
             # Cliquer sur "Add poll" via aria-label
-            self.page.locator('div[aria-label="Add poll"]').click()
+            add_poll = self.page.locator('div[aria-label="Add poll"]')
+            add_poll.wait_for(state="visible", timeout=10000)
+            add_poll.click()
             time.sleep(1)
 
             # Remplir la question du poll
@@ -119,12 +126,17 @@ class XPublisher:
             self.page.get_by_placeholder("Choice 1").fill(options[0])
             self.page.get_by_placeholder("Choice 2").fill(options[1])
             for idx in range(2, min(len(options), 4)):
-                self.page.locator('div[aria-label="Add a choice"]').click()
+                add_choice = self.page.locator('div[aria-label="Add a choice"]')
+                add_choice.wait_for(state="visible", timeout=5000)
+                add_choice.click()
                 self.page.get_by_placeholder(f"Choice {idx+1}").fill(options[idx])
 
             # Publier
             btn = self.page.get_by_test_id("tweetButtonInline")
-            btn.wait_for(state="enabled", timeout=10000)
+            btn.wait_for(state="visible", timeout=10000)
+            if not btn.is_enabled():
+                logging.error("Bouton poll non activé, abandon publication.")
+                return False
             btn.click()
             self.page.wait_for_selector("div[data-testid='toast']", timeout=5000)
 

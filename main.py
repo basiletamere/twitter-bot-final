@@ -78,8 +78,8 @@ def post_randomly(state: BotState, engine: GeminiContentEngine, publisher: XPubl
 
         post_types = [
             ("burst", 0.6),
-            ("thread", 0.15),
-            ("link", 0.15),
+            ("thread", 0.3),
+            ("link", 0.0),
             ("substack", 0.05),
             ("gumroad", 0.05)
         ]

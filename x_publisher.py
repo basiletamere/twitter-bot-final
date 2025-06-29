@@ -2,7 +2,7 @@
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError, Error as PlaywrightError
 import logging
 import time
-from typing import Optional, List
+from typing import List
 
 # URL de la page d'accueil X
 HOME_URL = "https://x.com/home"
@@ -98,23 +98,39 @@ class XPublisher:
 
     def post_poll(self, question: str, options: List[str]) -> bool:
         """
-        Crée un sondage (poll) avec question et options.
+        Crée un sondage X (poll) avec question et options.
         """
         logging.info("-- Début post_poll() --")
         try:
             self.page.goto(HOME_URL, timeout=60000, wait_until="networkidle")
-            # Ouvre l'UI sondage
-            self.page.get_by_test_id("pollButton").click()
-            # Remplir question et options
-            self.page.get_by_test_id("pollText").fill(question)
-            for idx, opt in enumerate(options):
-                sel = f"pollOption_{idx}"
-                self.page.get_by_test_id(sel).fill(opt)
+            # Ouvrir le composer et entrer la question
+            textarea = self.page.get_by_test_id("tweetTextarea_0")
+            textarea.locator("div").nth(2).click()
+            textarea.fill(question)
+            time.sleep(1)
+
+            # Cliquer sur "Add poll" via aria-label
+            self.page.locator('div[aria-label="Add poll"]').click()
+            time.sleep(1)
+
+            # Remplir la question du poll
+            self.page.get_by_placeholder("Ask a question…").fill(question)
+            # Remplir les options
+            self.page.get_by_placeholder("Choice 1").fill(options[0])
+            self.page.get_by_placeholder("Choice 2").fill(options[1])
+            for idx in range(2, min(len(options), 4)):
+                self.page.locator('div[aria-label="Add a choice"]').click()
+                self.page.get_by_placeholder(f"Choice {idx+1}").fill(options[idx])
+
             # Publier
-            self.page.get_by_test_id("tweetButtonInline").click()
+            btn = self.page.get_by_test_id("tweetButtonInline")
+            btn.wait_for(state="enabled", timeout=10000)
+            btn.click()
             self.page.wait_for_selector("div[data-testid='toast']", timeout=5000)
+
             logging.info("Sondage publié avec succès 🚀")
             return True
+
         except PlaywrightTimeoutError as e:
             logging.error(f"Erreur poll : {e}")
             return False

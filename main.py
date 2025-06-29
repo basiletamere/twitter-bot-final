@@ -86,7 +86,7 @@ def post_randomly(state: BotState, engine: GeminiContentEngine, publisher: XPubl
         ("substack", 0.05),
         ("gumroad", 0.05)
     ]
-    post_type, _ = random.choices([t[0] for t in post_types], weights=[t[1] for t in post_types])[0]
+    chosen_type = random.choices([t[0] for t in post_types], weights=[t[1] for t in post_types])[0]  # Fix unpacking
 
     try:
         prompt = state.pick_prompt()
@@ -97,7 +97,7 @@ def post_randomly(state: BotState, engine: GeminiContentEngine, publisher: XPubl
         lang_code, lang_name, _ = random.choices(LANGUAGES, weights=[w for _, _, w in LANGUAGES])[0]
         personal = random.random() < 0.14  # 1/7 chance pour tweet perso
 
-        if post_type == "burst":
+        if chosen_type == "burst":
             tweet = engine.generate_tweet(prompt, lang_name, personal=personal)
             if tweet:
                 lines = [
@@ -117,7 +117,7 @@ def post_randomly(state: BotState, engine: GeminiContentEngine, publisher: XPubl
             else:
                 logging.warning(f"Aucun contenu pour '{prompt}' en {lang_name}.")
 
-        elif post_type == "thread":
+        elif chosen_type == "thread":
             threads = engine.generate_thread(prompt, lang_name)
             for tweet in threads:
                 tweet_text = tweet.strip()[:1000]
@@ -128,7 +128,7 @@ def post_randomly(state: BotState, engine: GeminiContentEngine, publisher: XPubl
                     save_tweet_to_log(tweet_text)
                 time.sleep(random.uniform(2, 5))  # Pause humaine
 
-        elif post_type == "poll":
+        elif chosen_type == "poll":
             question = engine.generate_tweet(f"Question de sondage sur : {prompt}", lang_name)
             options = ["Oui", "Non"]
             success = publisher.post_poll(question, options)
@@ -136,7 +136,7 @@ def post_randomly(state: BotState, engine: GeminiContentEngine, publisher: XPubl
                 state.tweets_posted += 1
                 logging.info(f"Poll publié.")
 
-        elif post_type == "link":
+        elif chosen_type == "link":
             tweet = engine.generate_tweet_with_link(prompt, lang_name)
             if tweet:
                 success = publisher.post_tweet(tweet)
@@ -145,7 +145,7 @@ def post_randomly(state: BotState, engine: GeminiContentEngine, publisher: XPubl
                     logging.info(f"Tweet lien publié.")
                     save_tweet_to_log(tweet)
 
-        elif post_type == "substack":
+        elif chosen_type == "substack":
             tweet = engine.generate_tweet("Rejoignez ma newsletter Substack pour des analyses IA exclusives !", "anglais")
             tweet = f"{tweet} https://ai_lab7.substack.com"[:1000]
             success = publisher.post_tweet(tweet)
@@ -154,7 +154,7 @@ def post_randomly(state: BotState, engine: GeminiContentEngine, publisher: XPubl
                 logging.info(f"Tweet Substack publié.")
                 save_tweet_to_log(tweet)
 
-        elif post_type == "gumroad":
+        elif chosen_type == "gumroad":
             tweet = engine.generate_tweet("Découvrez mon guide pour créer un bot IA comme @ai_lab7 !", "anglais")
             tweet = f"{tweet} https://gumroad.com/ai_lab7"[:1000]
             success = publisher.post_tweet(tweet)
@@ -168,7 +168,7 @@ def post_randomly(state: BotState, engine: GeminiContentEngine, publisher: XPubl
     finally:
         # Pause aléatoire entre 15 min et 2h pour imiter un humain
         sleep_time = random.uniform(900, 7200)  # 15 min à 2h en secondes
-        logging.info(f"Pause de {sleep_time/12:.1f} minutes avant prochain post.")
+        logging.info(f"Pause de {sleep_time/60:.1f} minutes avant prochain post.")
         time.sleep(sleep_time)
 
 def main():

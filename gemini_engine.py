@@ -27,7 +27,7 @@ class GeminiContentEngine:
             lines = [line.strip() for line in raw.splitlines() if line.strip() and not re.match(r'^(Option|Here|Here is|Voici|Traduction|Translation)\b', line, re.IGNORECASE)]
             tweet = lines[0] if lines else raw.splitlines()[0]
             tweet = re.sub(r'^\d+[\)\.\s]+', '', tweet).strip()
-            return tweet[:1000]
+            return tweet[:280]
         except Exception as exc:
             logging.error(f"Erreur tweet : {exc}")
             return None
@@ -40,7 +40,7 @@ class GeminiContentEngine:
         )
         try:
             response = self.publishing_model.generate_content(thread_prompt)
-            return [t.strip()[:1000] for t in response.text.split("---")[:3]]
+            return [t.strip()[:280] for t in response.text.split("---")[:3]]
         except Exception as exc:
             logging.error(f"Erreur thread : {exc}")
             return []
@@ -50,14 +50,17 @@ class GeminiContentEngine:
         category = prompt_text.split(" - ")[0].lower()
         source = sources.get(category, "https://www.nature.com")
         full_prompt = (
-            f"Rédige un tweet court (<250 caractères) en {lang_name} sur : '{prompt_text}'. "
+            f"Rédige un tweet court en {lang_name} sur : '{prompt_text}'. "
             "Ton varié, inclut une stat/fait précis. Évite les phrases clichés sur l’IA. "
             f"Ajoute le lien : {source}. Pas de hashtags."
         )
         try:
             response = self.publishing_model.generate_content(full_prompt)
-            tweet = response.text.strip()[:250]
-            return f"{tweet} {source}"[:1000]
+            tweet = response.text.strip()
+            lines = [line.strip() for line in tweet.splitlines() if line.strip() and not re.match(r'^(Option|Here|Here is|Voici|Traduction|Translation)\b', line, re.IGNORECASE)]
+            tweet = lines[0] if lines else tweet.splitlines()[0]
+            tweet = re.sub(r'^\d+[\)\.\s]+', '', tweet).strip()
+            return tweet[:280]
         except Exception as exc:
             logging.error(f"Erreur tweet lien : {exc}")
             return None

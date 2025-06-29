@@ -6,16 +6,13 @@ import re
 from datetime import datetime
 from gemini_engine import GeminiContentEngine
 from x_publisher import XPublisher
-import schedule
 
-# Configuration du logger
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[logging.StreamHandler()]
 )
 
-# Constantes de configuration
 AUTH_FILE = "playwright_auth.json"
 PROMPTS_FILE = "prompts.txt"
 POSTED_LOG = "posted_tweets.log"
@@ -27,7 +24,6 @@ LANGUAGES = [
     ('ar', "arabe", 0.05),
     ('ja', "japonais", 0.05)
 ]
-
 
 class BotState:
     def __init__(self):
@@ -62,7 +58,6 @@ class BotState:
     def pick_prompt(self) -> str:
         return random.choice(self.prompts) if self.prompts else None
 
-
 def save_tweet_to_log(content: str):
     try:
         ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -71,35 +66,7 @@ def save_tweet_to_log(content: str):
     except Exception as e:
         logging.error(f"Erreur écriture log tweets : {e}")
 
-
 def post_randomly(state: BotState, engine: GeminiContentEngine, publisher: XPublisher):
-    """
-    Tire un tweet (de tout type) et le poste via XPublisher.
-    """
-    try:
-        success = publisher.post_tweet(state, engine, publisher)
-        if success:
-            state.tweets_posted += 1
-            logging.info(f"Tweet {state.tweets_posted}/{state.daily_goal} publié.")
-            # On suppose que XPublisher retourne le texte tweeté s'il veut loguer
-        else:
-            logging.warning("post_tweet a retourné False.")
-    except Exception as e:
-        logging.error(f"Erreur dans post_randomly: {e}")
-    finally:
-        sleep_time = random.uniform(900, 7200)
-        logging.info(f"Pause de {sleep_time/60:.1f} minutes avant prochain post.")
-        time.sleep(sleep_time)
-
-    post_types = [
-        ("burst", 0.6),
-        ("thread", 0.15),
-        ("link", 0.15),
-        ("substack", 0.05),
-        ("gumroad", 0.05)
-    ]
-    chosen_type = random.choices([t[0] for t in post_types], weights=[t[1] for t in post_types])[0]
-
     try:
         prompt = state.pick_prompt()
         if not prompt:
@@ -109,27 +76,34 @@ def post_randomly(state: BotState, engine: GeminiContentEngine, publisher: XPubl
         lang_code, lang_name, _ = random.choices(LANGUAGES, weights=[w for _, _, w in LANGUAGES])[0]
         personal = random.random() < 0.14
 
+        post_types = [
+            ("burst", 0.6),
+            ("thread", 0.15),
+            ("link", 0.15),
+            ("substack", 0.05),
+            ("gumroad", 0.05)
+        ]
+        chosen_type = random.choices([t[0] for t in post_types], weights=[t[1] for t in post_types])[0]
+
         if chosen_type == "burst":
             tweet = engine.generate_tweet(prompt, lang_name, personal=personal)
             if tweet:
                 lines = [l.strip() for l in tweet.splitlines() if l.strip() and not re.match(r'^(Option|Here|Voici)\b', l, re.IGNORECASE)]
                 clean = lines[0] if lines else tweet.splitlines()[0]
                 clean = re.sub(r'^\d+[\)\.\s]+', '', clean).strip()
-                tweet_text = clean[:1000]
+                tweet_text = clean[:280]
                 success = publisher.post_tweet(tweet_text)
                 if success:
                     state.tweets_posted += 1
                     logging.info(f"Tweet {state.tweets_posted}/{state.daily_goal} publié.")
                     save_tweet_to_log(tweet_text)
                 else:
-                    logging.warning("post_tweet a retourné False.")
-            else:
-                logging.warning(f"Aucun contenu pour '{prompt}' en {lang_name}.")
+                    logging.warning("Échec publication tweet.")
 
         elif chosen_type == "thread":
             threads = engine.generate_thread(prompt, lang_name)
             for tweet in threads:
-                tweet_text = tweet.strip()[:1000]
+                tweet_text = tweet.strip()[:280]
                 success = publisher.post_tweet(tweet_text)
                 if success:
                     state.tweets_posted += 1
@@ -140,37 +114,37 @@ def post_randomly(state: BotState, engine: GeminiContentEngine, publisher: XPubl
         elif chosen_type == "link":
             tweet = engine.generate_tweet_with_link(prompt, lang_name)
             if tweet:
-                success = publisher.post_tweet(tweet)
+                tweet_text = tweet[:280]
+                success = publisher.post_tweet(tweet_text)
                 if success:
                     state.tweets_posted += 1
                     logging.info("Tweet lien publié.")
-                    save_tweet_to_log(tweet)
+                    save_tweet_to_log(tweet_text)
 
         elif chosen_type == "substack":
             tweet = engine.generate_tweet("Rejoignez ma newsletter Substack pour des analyses IA exclusives !", "anglais")
-            tweet = f"{tweet} https://ai_lab7.substack.com"[:1000]
-            success = publisher.post_tweet(tweet)
+            tweet_text = f"{tweet} https://ai_lab7.substack.com"[:280]
+            success = publisher.post_tweet(tweet_text)
             if success:
                 state.tweets_posted += 1
                 logging.info("Tweet Substack publié.")
-                save_tweet_to_log(tweet)
+                save_tweet_to_log(tweet_text)
 
         elif chosen_type == "gumroad":
             tweet = engine.generate_tweet("Découvrez mon guide pour créer un bot IA comme @ai_lab7 !", "anglais")
-            tweet = f"{tweet} https://gumroad.com/ai_lab7"[:1000]
-            success = publisher.post_tweet(tweet)
+            tweet_text = f"{tweet} https://gumroad.com/ai_lab7"[:280]
+            success = publisher.post_tweet(tweet_text)
             if success:
                 state.tweets_posted += 1
                 logging.info("Tweet Gumroad publié.")
-                save_tweet_to_log(tweet)
+                save_tweet_to_log(tweet_text)
 
     except Exception as e:
-        logging.error(f"Erreur dans post_randomly: {e}")
+        logging.error(f"Erreur dans post_randomly : {e}")
     finally:
         sleep_time = random.uniform(900, 7200)
-        logging.info(f"Pause de {sleep_time/60:.1f} minutes avant prochain post.")
+        logging.info(f"Pause de {sleep_time/60:.1f} minutes.")
         time.sleep(sleep_time)
-
 
 def main():
     logging.info("=== DÉMARRAGE BOT HUMAIN-LIKE MULTILINGUE X ===")
@@ -181,12 +155,11 @@ def main():
     try:
         while True:
             post_randomly(state, engine, publisher)
-    except Exception as e:
-        logging.critical(f"Erreur fatale au démarrage: {e}", exc_info=True)
+    except KeyboardInterrupt:
+        logging.info("Arrêt par l'utilisateur.")
     finally:
         publisher.close()
         logging.info("Bot arrêté proprement.")
-
 
 if __name__ == '__main__':
     main()

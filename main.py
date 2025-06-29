@@ -73,12 +73,23 @@ def save_tweet_to_log(content: str):
 
 
 def post_randomly(state: BotState, engine: GeminiContentEngine, publisher: XPublisher):
-    remaining = state.daily_goal - state.tweets_posted
-    if remaining <= 0:
-        state.daily_goal = random.randint(5, 10)
-        state.tweets_posted = 0
-        logging.info(f"Nouvelle journée. Objectif : {state.daily_goal} tweets.")
-        return
+    """
+    Tire un tweet (de tout type) et le poste via XPublisher.
+    """
+    try:
+        success = publisher.post_tweet(state, engine, publisher)
+        if success:
+            state.tweets_posted += 1
+            logging.info(f"Tweet {state.tweets_posted}/{state.daily_goal} publié.")
+            # On suppose que XPublisher retourne le texte tweeté s'il veut loguer
+        else:
+            logging.warning("post_tweet a retourné False.")
+    except Exception as e:
+        logging.error(f"Erreur dans post_randomly: {e}")
+    finally:
+        sleep_time = random.uniform(900, 7200)
+        logging.info(f"Pause de {sleep_time/60:.1f} minutes avant prochain post.")
+        time.sleep(sleep_time)
 
     post_types = [
         ("burst", 0.6),

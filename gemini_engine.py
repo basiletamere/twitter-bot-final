@@ -6,7 +6,7 @@ import google.generativeai as genai
 
 class GeminiContentEngine:
     def __init__(self, model_name: str = 'gemini-2.0-flash', api_key: Optional[str] = None) -> None:
-        key = api_key or os.getenv("GEMINI_API_KEY")
+        key = api_key or "AIzaSyDKoohEijsIeAU3q4rw0hmqypqg3CphbGE"
         if not key:
             logging.critical("Clé API Gemini non trouvée.")
             raise ValueError("Clé API Gemini non trouvée.")
@@ -18,23 +18,16 @@ class GeminiContentEngine:
     def generate_tweet(self, prompt_text: str, lang_name: str, personal: bool = False) -> Optional[str]:
         full_prompt = (
             f"Rédige un tweet court (<280 caractères) en {lang_name} sur : '{prompt_text}'. "
-            "Ton varié (fun, sérieux, curieux, provocateur). Inclut une stat ou un fait précis. "
-            "Évite les phrases clichés sur l'IA. Pas de hashtags. Retourne uniquement le tweet."
-            if not personal else
-            f"Rédige un tweet court (<280 caractères) en {lang_name} sur : '{prompt_text}'. "
-            "Ton personnel, mentionne que tu as 16 ans, fun et engageant. Inclut une stat ou un fait précis. "
-            "Évite les phrases clichés sur l'IA. Pas de hashtags. Retourne uniquement le tweet."
+            f"{'Ton personnel, mentionne que tu as 16 ans, fun et engageant.' if personal else 'Ton varié (fun, sérieux, curieux, provocateur). Inclut une stat ou un fait précis. Évite les phrases clichés sur l’IA.'} "
+            "Pas de hashtags. Retourne uniquement le tweet."
         )
         try:
             response = self.publishing_model.generate_content(full_prompt)
             raw = response.text.strip()
-            lines = [
-                line.strip() for line in raw.splitlines()
-                if line.strip() and not re.match(r'^(Option|Here|Here is|Voici|Traduction|Translation)\b', line, re.IGNORECASE)
-            ]
+            lines = [line.strip() for line in raw.splitlines() if line.strip() and not re.match(r'^(Option|Here|Here is|Voici|Traduction|Translation)\b', line, re.IGNORECASE)]
             tweet = lines[0] if lines else raw.splitlines()[0]
             tweet = re.sub(r'^\d+[\)\.\s]+', '', tweet).strip()
-            return tweet[:280]
+            return tweet[:1000]
         except Exception as exc:
             logging.error(f"Erreur tweet : {exc}")
             return None
@@ -42,35 +35,29 @@ class GeminiContentEngine:
     def generate_thread(self, prompt_text: str, lang_name: str) -> List[str]:
         thread_prompt = (
             f"Rédige un thread de 3 tweets (<280 caractères chacun) en {lang_name} sur : '{prompt_text}'. "
-            "Ton varié (fun, sérieux, curieux, provocateur). Inclut stats/faits. Évite les phrases clichés sur l'IA. "
+            "Ton varié (fun, sérieux, curieux, provocateur). Inclut stats/faits. Évite les phrases clichés sur l’IA. "
             "Pas de hashtags. Retourne les tweets séparés par '---'."
         )
         try:
             response = self.publishing_model.generate_content(thread_prompt)
-            return response.text.split("---")[:3]
+            return [t.strip()[:1000] for t in response.text.split("---")[:3]]
         except Exception as exc:
             logging.error(f"Erreur thread : {exc}")
             return []
 
     def generate_tweet_with_link(self, prompt_text: str, lang_name: str) -> Optional[str]:
-        sources = {
-            "news": "https://www.nature.com",
-            "éthique": "https://www.technologyreview.com",
-            "applications": "https://techcrunch.com",
-            "fun facts": "https://www.wired.com",
-            "futuristes": "https://futurism.com"
-        }
+        sources = {"news": "https://www.nature.com", "éthique": "https://www.technologyreview.com", "applications": "https://techcrunch.com", "fun facts": "https://www.wired.com", "futuristes": "https://futurism.com"}
         category = prompt_text.split(" - ")[0].lower()
         source = sources.get(category, "https://www.nature.com")
         full_prompt = (
             f"Rédige un tweet court (<250 caractères) en {lang_name} sur : '{prompt_text}'. "
-            "Ton varié, inclut une stat/fait précis. Évite les phrases clichés sur l'IA. "
+            "Ton varié, inclut une stat/fait précis. Évite les phrases clichés sur l’IA. "
             f"Ajoute le lien : {source}. Pas de hashtags."
         )
         try:
             response = self.publishing_model.generate_content(full_prompt)
             tweet = response.text.strip()[:250]
-            return f"{tweet} {source}"
+            return f"{tweet} {source}"[:1000]
         except Exception as exc:
             logging.error(f"Erreur tweet lien : {exc}")
             return None

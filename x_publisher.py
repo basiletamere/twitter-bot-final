@@ -2,8 +2,6 @@ from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeo
 import logging
 import time
 from typing import Optional
-from stability_sdk import client
-import stability_sdk.interfaces.gooseai.generation.generation_pb2 as generation
 
 HOME_URL = "https://x.com/home"
 DEFAULT_USER_AGENT = (
@@ -13,12 +11,12 @@ DEFAULT_USER_AGENT = (
 )
 
 class XPublisher:
-    def __init__(self, auth_file_path: str, headless: bool = False):
+    def __init__(self, auth_file_path: str, headless: bool = True):
         self.auth_file_path = auth_file_path
         self.playwright = sync_playwright().start()
         self.browser = self.playwright.chromium.launch(
             headless=headless,
-            args=["--no-sandbox", "--disable-blink-features=AutomationControlled"]
+            args=["--no-sandbox", "--disable-blink-features=AutomationControlled", "--disable-gpu", "--single-process"]
         )
         self._new_context()
         logging.info(f"Playwright initialisé (headless={headless}) avec auth '{auth_file_path}'")
@@ -33,40 +31,28 @@ class XPublisher:
             storage_state=self.auth_file_path,
             user_agent=DEFAULT_USER_AGENT,
             locale="en-US",
-            viewport={"width": 1280, "height": 800}
+            viewport={"width": 800, "height": 600},
+            ignore_https_errors=True
         )
-        self.context.set_default_timeout(30000)
+        self.context.set_default_timeout(15000)
         self.page = self.context.new_page()
         logging.info("Contexte et page (re)créés.")
-
-    def generate_image(self, prompt_text):
-        try:
-            stability_api = client.StabilityInference(key=os.getenv("STABILITY_API_KEY"))
-            resp = stability_api.generate(prompt=f"Infographie futuriste sur : {prompt_text}")
-            for img in resp.artifacts:
-                with open("image.png", "wb") as f:
-                    f.write(img.binary)
-                return "image.png"
-        except Exception as e:
-            logging.error(f"Erreur image : {e}")
-            return None
 
     def post_tweet(self, content: str, image_path: Optional[str] = None) -> bool:
         logging.info("-- Début post_tweet() --")
         attempt = 0
-        while attempt < 2:
+        while attempt < 3:  # Augmente à 3 tentatives pour plus de robustesse
             try:
-                self.page.goto(HOME_URL, timeout=60000, wait_until="networkidle")
+                self.page.goto(HOME_URL, timeout=30000, wait_until="domcontentloaded")
                 logging.debug("Page home chargée")
-                self.page.get_by_test_id("tweetTextarea_0").locator("div").nth(2).click()
-                self.page.get_by_test_id("tweetTextarea_0").fill(content)
+                # Utilise un sélecteur alternatif plus générique
+                self.page.locator("div[role='textbox']").first.click()
+                self.page.locator("div[role='textbox']").first.fill(content[:1000])
                 logging.debug(f"Contenu rempli ({len(content)} caractères)")
-                if image_path:
-                    self.page.get_by_test_id("fileInput").set_input_files(image_path)
-                btn = self.page.get_by_test_id("tweetButtonInline")
-                btn.wait_for(state="enabled", timeout=15000)
+                btn = self.page.locator("div[data-testid='tweetButtonInline']").first
+                btn.wait_for(state="visible", timeout=10000)
                 btn.click()
-                self.page.wait_for_selector("div[data-testid='toast']", timeout=10000)
+                self.page.wait_for_selector("div[data-testid='toast']", timeout=5000)
                 logging.info("Tweet publié avec succès 🚀")
                 return True
             except PlaywrightTimeoutError as e:
@@ -76,24 +62,25 @@ class XPublisher:
                 logging.warning(f"Erreur générale : {e}. Recovery.")
                 self._new_context()
                 attempt += 1
+                time.sleep(2)  # Pause avant retry
                 continue
             finally:
                 logging.info("-- Fin post_tweet() --")
-        logging.error("Échec recovery.")
+        logging.error("Échec recovery après 3 tentatives.")
         return False
 
     def post_poll(self, question: str, options: list, duration: str = "1 day") -> bool:
         logging.info("-- Début post_poll() --")
         try:
-            self.page.goto(HOME_URL, timeout=60000, wait_until="networkidle")
-            self.page.get_by_test_id("pollButton").click()
-            self.page.get_by_test_id("tweetTextarea_0").fill(question)
+            self.page.goto(HOME_URL, timeout=30000, wait_until="domcontentloaded")
+            self.page.locator("div[data-testid='pollButton']").click()
+            self.page.locator("div[role='textbox']").first.fill(question[:280])
             for i, option in enumerate(options[:2]):
-                self.page.get_by_test_id(f"pollChoice{i}").fill(option)
-            self.page.get_by_test_id("pollDuration").select_option(duration)
-            btn = self.page.get_by_test_id("tweetButtonInline")
+                self.page.locator(f"div[data-testid='pollChoice{i}']").fill(option)
+            self.page.locator("select[data-testid='pollDuration']").select_option(duration)
+            btn = self.page.locator("div[data-testid='tweetButtonInline']").first
             btn.click()
-            self.page.wait_for_selector("div[data-testid='toast']", timeout=10000)
+            self.page.wait_for_selector("div[data-testid='toast']", timeout=5000)
             logging.info("Poll publié avec succès 🚀")
             return True
         except Exception as e:

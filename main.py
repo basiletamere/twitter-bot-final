@@ -21,7 +21,7 @@ PROMPTS_FILE = "prompts.txt"
 POSTED_LOG = "posted_tweets.log"
 MIN_PROMPTS = 10
 LANGUAGES = [
-    ('en', "anglais", 0.4),  # 40% des tweets
+    ('en', "anglais", 0.4),
     ('fr', "français", 0.3),
     ('es', "espagnol", 0.2),
     ('ar', "arabe", 0.05),
@@ -31,7 +31,7 @@ LANGUAGES = [
 class BotState:
     def __init__(self):
         self.prompts = []
-        self.daily_goal = random.randint(5, 10)  # 5-10 tweets/jour
+        self.daily_goal = random.randint(5, 10)
         self.tweets_posted = 0
 
     def load_prompts(self, engine: GeminiContentEngine):
@@ -72,21 +72,20 @@ def save_tweet_to_log(content: str):
 def post_randomly(state: BotState, engine: GeminiContentEngine, publisher: XPublisher):
     remaining = state.daily_goal - state.tweets_posted
     if remaining <= 0:
-        state.daily_goal = random.randint(5, 10)  # Réinitialise pour le lendemain
+        state.daily_goal = random.randint(5, 10)
         state.tweets_posted = 0
         logging.info(f"Nouveau jour détecté. Objectif : {state.daily_goal} tweets.")
         return
 
-    # Choisir un type de post aléatoirement
+    # Choisir un type de post aléatoirement (poll retiré)
     post_types = [
-        ("burst", 0.5),  # 50% chance
+        ("burst", 0.6),  # 60% chance (augmenté pour compenser)
         ("thread", 0.15),
-        ("poll", 0.15),
-        ("link", 0.1),
+        ("link", 0.15),
         ("substack", 0.05),
         ("gumroad", 0.05)
     ]
-    chosen_type = random.choices([t[0] for t in post_types], weights=[t[1] for t in post_types])[0]  # Fix unpacking
+    chosen_type = random.choices([t[0] for t in post_types], weights=[t[1] for t in post_types])[0]
 
     try:
         prompt = state.pick_prompt()
@@ -95,18 +94,15 @@ def post_randomly(state: BotState, engine: GeminiContentEngine, publisher: XPubl
             return
 
         lang_code, lang_name, _ = random.choices(LANGUAGES, weights=[w for _, _, w in LANGUAGES])[0]
-        personal = random.random() < 0.14  # 1/7 chance pour tweet perso
+        personal = random.random() < 0.14
 
         if chosen_type == "burst":
             tweet = engine.generate_tweet(prompt, lang_name, personal=personal)
             if tweet:
-                lines = [
-                    l.strip() for l in tweet.splitlines()
-                    if l.strip() and not re.match(r'^(Option|Here|Here is|Voici|Traduction|Translation)\b', l, re.IGNORECASE)
-                ]
+                lines = [l.strip() for l in tweet.splitlines() if l.strip() and not re.match(r'^(Option|Here|Here is|Voici|Traduction|Translation)\b', l, re.IGNORECASE)]
                 clean = lines[0] if lines else tweet.splitlines()[0]
                 clean = re.sub(r'^\d+[\)\.\s]+', '', clean).strip()
-                tweet_text = clean[:1000]  # Utilise jusqu'à 1000 caractères avec X Premium
+                tweet_text = clean[:1000]
                 success = publisher.post_tweet(tweet_text)
                 if success:
                     state.tweets_posted += 1
@@ -126,15 +122,7 @@ def post_randomly(state: BotState, engine: GeminiContentEngine, publisher: XPubl
                     state.tweets_posted += 1
                     logging.info(f"Tweet thread {state.tweets_posted}/{state.daily_goal} publié.")
                     save_tweet_to_log(tweet_text)
-                time.sleep(random.uniform(2, 5))  # Pause humaine
-
-        elif chosen_type == "poll":
-            question = engine.generate_tweet(f"Question de sondage sur : {prompt}", lang_name)
-            options = ["Oui", "Non"]
-            success = publisher.post_poll(question, options)
-            if success:
-                state.tweets_posted += 1
-                logging.info(f"Poll publié.")
+                time.sleep(random.uniform(2, 5))
 
         elif chosen_type == "link":
             tweet = engine.generate_tweet_with_link(prompt, lang_name)
@@ -166,8 +154,7 @@ def post_randomly(state: BotState, engine: GeminiContentEngine, publisher: XPubl
     except Exception as e:
         logging.error(f"Erreur dans post_randomly: {e}")
     finally:
-        # Pause aléatoire entre 15 min et 2h pour imiter un humain
-        sleep_time = random.uniform(900, 7200)  # 15 min à 2h en secondes
+        sleep_time = random.uniform(900, 7200)
         logging.info(f"Pause de {sleep_time/60:.1f} minutes avant prochain post.")
         time.sleep(sleep_time)
 
@@ -180,11 +167,8 @@ def main():
         publisher = XPublisher(auth_file_path=AUTH_FILE, headless=True)
         state = BotState()
         state.load_prompts(engine)
-
-        # Boucle continue avec posts aléatoires
         while True:
             post_randomly(state, engine, publisher)
-
     except Exception as e:
         logging.critical(f"Erreur fatale au démarrage: {e}", exc_info=True)
     finally:

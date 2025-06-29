@@ -1,5 +1,5 @@
 # x_publisher.py
-from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError, Error as PlaywrightError
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError, PageCrashError, Error as PlaywrightError
 import logging
 import time
 from typing import List
@@ -54,28 +54,25 @@ class XPublisher:
     def post_tweet(self, content: str) -> bool:
         """
         Remplit le composer et poste un tweet.
-        Gère les crashes de page en relançant une tentative.
+        Gère les crashes de page et timeouts séparément.
         """
         logging.info("-- Début post_tweet() --")
         attempt = 0
         while attempt < 2:
             try:
                 self.page.goto(HOME_URL, timeout=60000, wait_until="networkidle")
-                # Focus et remplissage
                 ta = self.page.get_by_test_id("tweetTextarea_0")
                 ta.locator("div").nth(2).click()
                 ta.press("CapsLock")
                 ta.press("CapsLock")
                 ta.fill(content)
                 ta.locator("div").nth(2).click()
-                # Attente visibilité bouton
+
                 btn = self.page.get_by_test_id("tweetButtonInline")
                 btn.wait_for(state="visible", timeout=15000)
-                # Vérifier qu'il est activé
                 if not btn.is_enabled():
                     logging.warning("Bouton tweet non activé, abandon publication.")
                     return False
-                # Clics multiples
                 for i in range(3):
                     btn.click()
                     logging.debug(f"Clic Tweet #{i+1}")
@@ -84,73 +81,26 @@ class XPublisher:
                 logging.info("Tweet publié avec succès 🚀")
                 return True
 
-            except PlaywrightError as e:
-                logging.warning(f"Playwright erreur détectée : {e}. Recovery.")
+            except PageCrashError as e:
+                logging.warning(f"PageCrashError : {e}, recovery.")
                 attempt += 1
                 time.sleep(2)
                 self._new_context()
                 continue
 
             except PlaywrightTimeoutError as e:
-                logging.error(f"Timeout lors de la publication : {e}")
+                logging.error(f"TimeoutPlaywright : {e}")
+                return False
+
+            except PlaywrightError as e:
+                logging.error(f"Erreur Playwright inattendue : {e}")
                 return False
 
             finally:
                 logging.info("-- Fin post_tweet() --")
 
-        logging.error("Échec recovery après 2 tentatives.")
+        logging.error("Echec recovery après 2 tentatives, abandon post_tweet.")
         return False
-
-    def post_poll(self, question: str, options: List[str]) -> bool:
-        """
-        Crée un sondage X (poll) avec question et options.
-        """
-        logging.info("-- Début post_poll() --")
-        try:
-            self.page.goto(HOME_URL, timeout=60000, wait_until="networkidle")
-            # Ouvrir le composer et entrer la question
-            ta = self.page.get_by_test_id("tweetTextarea_0")
-            ta.locator("div").nth(2).click()
-            ta.fill(question)
-            time.sleep(1)
-
-            # Cliquer sur "Add poll" via aria-label
-            add_poll = self.page.locator('div[aria-label="Add poll"]')
-            add_poll.wait_for(state="visible", timeout=10000)
-            add_poll.click()
-            time.sleep(1)
-
-            # Remplir la question du poll
-            self.page.get_by_placeholder("Ask a question…").fill(question)
-            # Remplir les options
-            self.page.get_by_placeholder("Choice 1").fill(options[0])
-            self.page.get_by_placeholder("Choice 2").fill(options[1])
-            for idx in range(2, min(len(options), 4)):
-                add_choice = self.page.locator('div[aria-label="Add a choice"]')
-                add_choice.wait_for(state="visible", timeout=5000)
-                add_choice.click()
-                self.page.get_by_placeholder(f"Choice {idx+1}").fill(options[idx])
-
-            # Publier
-            btn = self.page.get_by_test_id("tweetButtonInline")
-            btn.wait_for(state="visible", timeout=10000)
-            if not btn.is_enabled():
-                logging.error("Bouton poll non activé, abandon publication.")
-                return False
-            btn.click()
-            self.page.wait_for_selector("div[data-testid='toast']", timeout=5000)
-
-            logging.info("Sondage publié avec succès 🚀")
-            return True
-
-        except PlaywrightTimeoutError as e:
-            logging.error(f"Erreur poll : {e}")
-            return False
-        except Exception as e:
-            logging.error(f"Erreur inattendue lors du poll : {e}")
-            return False
-        finally:
-            logging.info("-- Fin post_poll() --")
 
     def close(self) -> None:
         """

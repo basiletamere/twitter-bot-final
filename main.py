@@ -120,7 +120,7 @@ def post_randomly(state: BotState, engine: GeminiContentEngine, publisher: XPubl
 
         elif chosen_type == "substack":
             tweet = engine.generate_tweet("Rejoignez ma newsletter Substack pour des analyses IA exclusives !", "anglais")
-            tweet_text = f"{tweet} https://ai_lab7.substack.com"[:500]  # Tronque à 500 caractères
+            tweet_text = f"{tweet} https://substack.com/@ailab7"[:500]  # Tronque à 500 caractères
             success = publisher.post_tweet(tweet_text)
             if success:
                 state.tweets_posted += 1

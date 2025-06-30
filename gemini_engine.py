@@ -70,9 +70,9 @@ class GeminiContentEngine:
         
         # Génère le contenu sans le lien, puis ajoute le lien
         full_prompt = (
-            f"Rédige un tweet court en {lang_name} sur : '{prompt_text}'. "
+            f"Rédige un tweet en {lang_name} sur : '{prompt_text}'. "
             "Ton varié, inclut une stat/fait précis. Évite les phrases clichés sur l’IA. "
-            "Pas de hashtags."
+            "Pas de hashtags. Inclut 1-2 emojis pertinents.Retourne uniquement le tweet"
         )
         try:
             response = self.publishing_model.generate_content(full_prompt)
@@ -89,46 +89,3 @@ class GeminiContentEngine:
         except Exception as exc:
             logging.error(f"Erreur inattendue lors de la génération du tweet avec lien : {exc}")
             return None
-
-    def discover_and_add_prompts(self, existing_prompts: Set[str], filepath: str = "prompts.txt") -> int:
-        discovery_prompt = (
-            "Génère 50 sujets tech/IA/programmation tendances. "
-            "Format : [Catégorie] - [Sujet]. Une ligne par sujet. Sans numérotation."
-        )
-        try:
-            response = self.discovery_model.generate_content(discovery_prompt)
-            topics = [t.strip() for t in response.text.splitlines() if t.strip()]
-            count = 0
-            with open(filepath, 'a', encoding='utf-8') as f:
-                for topic in topics:
-                    if topic not in existing_prompts:
-                        f.write(topic + '\n')
-                        existing_prompts.add(topic)
-                        count += 1
-                        logging.info(f"Sujet ajouté : {topic}")
-            logging.info(f"Découverte : {count} sujets ajoutés.")
-            return count
-        except google_exceptions.GoogleAPIError as exc:
-            logging.error(f"Erreur API Google : {exc}")
-            return 0
-        except Exception as exc:
-            logging.error(f"Erreur inattendue lors de la découverte de prompts : {exc}")
-            return 0
-
-    def generate_1000_prompts(self, filepath: str = "prompts.txt"):
-        prompt = (
-            "Génère 1000 sujets tech/IA (300 news, 200 éthique, 200 applications, 100 fun facts, 200 futuristes). "
-            "Format : [Catégorie] - [Sujet]. Une ligne par sujet."
-        )
-        try:
-            response = self.discovery_model.generate_content(prompt)
-            # Ajoute les prompts au fichier existant au lieu de l'écraser
-            with open(filepath, 'a', encoding='utf-8') as f:
-                f.write(response.text + '\n')
-            return response.text.splitlines()
-        except google_exceptions.GoogleAPIError as exc:
-            logging.error(f"Erreur API Google : {exc}")
-            return []
-        except Exception as exc:
-            logging.error(f"Erreur inattendue lors de la génération de 1000 prompts : {exc}")
-            return []
